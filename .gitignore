@@ -6,8 +6,12 @@ dist/
 wheels/
 *.egg-info
 
+# Jetbrains
+.idea
+
 # Virtual environments
 .venv
 
 output/
 input/
+example/

@@ -18,7 +18,7 @@ database_path = output_path / "database.db"
 image_dir = pathlib.Path("./input/lego")
 
 # Step 1: Extract Features
-pycolmap.extract_features(database_path, image_dir, camera_model='OPENCV')
+pycolmap.extract_features(database_path, image_dir, camera_model="OPENCV")
 
 # Step 2: Feature Matching
 pycolmap.match_exhaustive(database_path)
