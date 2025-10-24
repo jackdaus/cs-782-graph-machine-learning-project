@@ -2,6 +2,7 @@ import pathlib
 import pycolmap
 import rerun as rr
 import cv2
+import numpy as np
 
 # Set up rerun
 rr.init("rerun_example_my_data", spawn=True)
@@ -20,6 +21,9 @@ image_dir = pathlib.Path("./input/lego")
 # Log all images to Rerun
 exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 image_paths = sorted([p for p in image_dir.iterdir() if p.is_file() and p.suffix.lower() in exts])
+
+# Ensure all images and keypoints are logged at the same time on the timeline
+rr.set_time("stable_time", duration=0) 
 
 for img_path in image_paths:
     img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
@@ -62,7 +66,169 @@ except Exception as e:
     print(f"Feature logging to Rerun failed: {e}")
 
 # # Step 2: Feature Matching
-# pycolmap.match_exhaustive(database_path)
+pycolmap.match_exhaustive(database_path)
+
+# Log matcher results (pairwise correspondences) to Rerun as composite match panels
+try:
+    with pycolmap.Database(str(database_path)) as db:
+        images = db.read_all_images()
+        id_to_name = {img.image_id: img.name for img in images}
+        name_to_id = {img.name: img.image_id for img in images}
+
+        # Helper functions from COLMAP docs
+        def image_ids_to_pair_id(image_id1: int, image_id2: int) -> int:
+            if image_id1 > image_id2:
+                return 2147483647 * image_id2 + image_id1
+            else:
+                return 2147483647 * image_id1 + image_id2
+
+        # Collect candidate pairs to visualize. We try consecutive images by name order
+        # and fall back to scanning a subset of all pairs.
+        pairs_to_try = []
+        ordered_names = [p.name for p in image_paths]
+        for a, b in zip(ordered_names[:-1], ordered_names[1:]):
+            if a in name_to_id and b in name_to_id:
+                pairs_to_try.append((name_to_id[a], name_to_id[b]))
+
+        # If very few images or consecutive pairs fail, add a few more pairs.
+        if len(pairs_to_try) < 5:
+            ids = [name_to_id[n] for n in ordered_names if n in name_to_id]
+            for i in range(len(ids)):
+                for j in range(i + 1, min(i + 4, len(ids))):  # small banded window
+                    pairs_to_try.append((ids[i], ids[j]))
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_pairs = []
+        for p in pairs_to_try:
+            if p not in seen:
+                unique_pairs.append(p)
+                seen.add(p)
+
+        logged_pairs = 0
+        # Limit how many panels to log to avoid spamming the viewer
+        MAX_PANELS = 8
+        MAX_MATCHES_PER_PANEL = 300
+
+        for id1, id2 in unique_pairs:
+            if logged_pairs >= MAX_PANELS:
+                break
+            pair_id = image_ids_to_pair_id(id1, id2)
+            try:
+                # Prefer verified inliers if available via two-view geometries
+                matches = None
+                tvg = db.read_two_view_geometry(id1, id2)
+                if tvg is not None and hasattr(tvg, "inlier_matches") and tvg.inlier_matches is not None:
+                    matches = tvg.inlier_matches
+                else:
+                    # Fall back to raw descriptor matches if present
+                    matches = db.read_matches(pair_id)
+
+                if matches is None or len(matches) == 0:
+                    continue
+
+                # Fetch keypoints
+                kpts1 = db.read_keypoints(id1)
+                kpts2 = db.read_keypoints(id2)
+                if getattr(kpts1, "size", 0) == 0 or getattr(kpts2, "size", 0) == 0:
+                    continue
+
+                # Read and prepare images (RGB)
+                name1 = id_to_name[id1]
+                name2 = id_to_name[id2]
+                img1_bgr = cv2.imread(str(image_dir / name1), cv2.IMREAD_COLOR)
+                img2_bgr = cv2.imread(str(image_dir / name2), cv2.IMREAD_COLOR)
+                if img1_bgr is None or img2_bgr is None:
+                    continue
+                img1 = cv2.cvtColor(img1_bgr, cv2.COLOR_BGR2RGB)
+                img2 = cv2.cvtColor(img2_bgr, cv2.COLOR_BGR2RGB)
+
+                h1, w1 = img1.shape[:2]
+                h2, w2 = img2.shape[:2]
+                H = max(h1, h2)
+                W = w1 + w2
+                canvas = np.zeros((H, W, 3), dtype=np.uint8)
+                canvas[:h1, :w1] = img1
+                canvas[:h2, w1:w1 + w2] = img2
+
+                # Prepare matched point coordinates
+                m = matches
+                if isinstance(m, list):
+                    m = np.array(m)
+                if m.ndim != 2 or m.shape[1] != 2:
+                    # Unexpected format; skip safely
+                    continue
+
+                if len(m) > MAX_MATCHES_PER_PANEL:
+                    idx = np.linspace(0, len(m) - 1, MAX_MATCHES_PER_PANEL, dtype=int)
+                    m = m[idx]
+
+                pts1 = kpts1[m[:, 0], :2]
+                pts2 = kpts2[m[:, 1], :2]
+                pts2_offset = pts2.copy()
+                pts2_offset[:, 0] += w1  # shift x by width of left image
+
+                # Draw correspondences on the RGB canvas with a rainbow color gradient
+                # Color is determined by the Y coordinate of the LEFT image keypoint (top->bottom maps across the rainbow)
+
+                def _hsv_to_rgb_uint8(h: float, s: float = 1.0, v: float = 1.0) -> tuple:
+                    """Convert HSV (0-1 ranges) to an (R,G,B) uint8 tuple."""
+                    # Wrap hue just in case
+                    h = float(h) % 1.0
+                    s = float(s)
+                    v = float(v)
+                    i = int(h * 6.0)
+                    f = (h * 6.0) - i
+                    i = i % 6
+                    p = v * (1.0 - s)
+                    q = v * (1.0 - f * s)
+                    t = v * (1.0 - (1.0 - f) * s)
+                    if i == 0:
+                        r, g, b = v, t, p
+                    elif i == 1:
+                        r, g, b = q, v, p
+                    elif i == 2:
+                        r, g, b = p, v, t
+                    elif i == 3:
+                        r, g, b = p, q, v
+                    elif i == 4:
+                        r, g, b = t, p, v
+                    else:
+                        r, g, b = v, p, q
+                    return (int(round(r * 255.0)), int(round(g * 255.0)), int(round(b * 255.0)))
+
+                # Normalize Y on the left image to [0,1]
+                y_vals = pts1[:, 1]
+                y_min, y_max = float(np.min(y_vals)), float(np.max(y_vals))
+                y_span = max(1e-6, y_max - y_min)
+
+                for (x1, y1), (x2, y2) in zip(pts1, pts2_offset):
+                    p1 = (int(round(x1)), int(round(y1)))
+                    p2 = (int(round(x2)), int(round(y2)))
+                    # Map Y (top->bottom) to hue (0->1) to sweep the full rainbow
+                    y_norm = (float(y1) - y_min) / y_span
+                    color_rgb = _hsv_to_rgb_uint8(y_norm, 1.0, 1.0)
+                    cv2.line(canvas, p1, p2, color=color_rgb, thickness=1, lineType=cv2.LINE_AA)
+                # Optionally draw small circles at keypoints
+                for (x1, y1) in pts1:
+                    cv2.circle(canvas, (int(round(x1)), int(round(y1))), 2, color=(0, 255, 0), thickness=-1)
+                for (x2, y2) in pts2_offset:
+                    cv2.circle(canvas, (int(round(x2)), int(round(y2))), 2, color=(255, 0, 0), thickness=-1)
+
+                pair_label = f"{pathlib.Path(name1).stem}_vs_{pathlib.Path(name2).stem}"
+                rr.log(f"matches/{pair_label}", rr.Image(canvas))
+                logged_pairs += 1
+            except Exception as pair_err:
+                # Skip problematic pairs without breaking the whole pipeline
+                print(f"Warning: failed to visualize matches for pair ({id1}, {id2}): {pair_err}")
+                continue
+
+        if logged_pairs == 0:
+            print("No match panels were logged to Rerun (no matches found or readable).")
+        else:
+            print(f"Logged {logged_pairs} match panels to Rerun under 'matches/'.")
+except Exception as e:
+    print(f"Match logging to Rerun failed: {e}")
 
 # # Step 3: Mapper
 # maps = pycolmap.incremental_mapping(database_path, image_dir, output_path)
