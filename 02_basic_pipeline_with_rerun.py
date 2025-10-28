@@ -1,12 +1,13 @@
 import pathlib
+import enlighten
 import pycolmap
 import rerun as rr
 import cv2
 import numpy as np
+from pycolmap import logging
 
-# Set up rerun
+# Set up rerun. Spawn the Rerun viewer window.
 rr.init("rerun_example_my_data", spawn=True)
-# TODO the rerun logging! see https://rerun.io/examples/3d-reconstruction/structure_from_motion
 
 # Create output directory
 output_path = pathlib.Path("./output")
@@ -22,18 +23,21 @@ image_dir = pathlib.Path("./input/lego")
 exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 image_paths = sorted([p for p in image_dir.iterdir() if p.is_file() and p.suffix.lower() in exts])
 
-# Ensure all images and keypoints are logged at the same time on the timeline
+# Ensure all images and keypoints are logged at the same time on the timeline!
+# This is not an iterative process, so we can just log everthing as happening in the same logical moment.
 rr.set_time("stable_time", duration=0) 
 
-for img_path in image_paths:
-    img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-    if img is None:
-        print(f"Warning: failed to read {img_path}")
-        continue
-    # Convert BGR -> RGB for correct colors
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    # Use the filename stem as the entity path to keep things organized
-    rr.log(f"input/images/{img_path.stem}", rr.Image(img_rgb))
+# for img_path in image_paths:
+#     img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+#     if img is None:
+#         print(f"Warning: failed to read {img_path}")
+#         continue
+#     # Convert BGR -> RGB for correct colors
+#     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#     # Use the filename stem as the entity path to keep things organized
+#     rr.log(f"input/{img_path.stem}/image", rr.Image(img_rgb).compress(jpeg_quality=75))
+
+pycolmap.set_random_seed(0)
 
 # Step 1: Extract Features
 pycolmap.extract_features(database_path, image_dir, camera_model="OPENCV")
@@ -49,6 +53,16 @@ try:
     for img_path in image_paths:
         name = img_path.name
         img_id = name_to_id.get(name)
+
+        # Log the image
+        img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+        if img is None:
+            print(f"Warning: failed to read {img_path}")
+        # Convert BGR -> RGB for correct colors
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Use the image id to keep entity organized in Rerun
+        rr.log(f"input/{img_id}/image", rr.Image(img_rgb).compress(jpeg_quality=75))
+
         if img_id is None:
             # This can happen if the database is stale or filenames differ
             print(f"Warning: no DB entry for {name}")
@@ -58,14 +72,14 @@ try:
             continue
         # Take the first two columns as pixel coordinates (x, y)
         xy = kpts[:, :2].astype("float32", copy=False)
-        rr.log(f"input/images/{img_path.stem}/keypoints", rr.Points2D(xy, radii=1))
+        rr.log(f"input/{img_id}/keypoints", rr.Points2D(xy, radii=1))
         feat_logged += 1
     print(f"Logged keypoints for {feat_logged} images to Rerun")
 except Exception as e:
     # Keep the pipeline robust even if feature logging fails
     print(f"Feature logging to Rerun failed: {e}")
 
-# # Step 2: Feature Matching
+# Step 2: Feature Matching
 pycolmap.match_exhaustive(database_path)
 
 # Log matcher results (pairwise correspondences) to Rerun as composite match panels
@@ -216,7 +230,7 @@ try:
                     cv2.circle(canvas, (int(round(x2)), int(round(y2))), 2, color=(255, 0, 0), thickness=-1)
 
                 pair_label = f"{pathlib.Path(name1).stem}_vs_{pathlib.Path(name2).stem}"
-                rr.log(f"matches/{pair_label}", rr.Image(canvas))
+                rr.log(f"matches/{pair_label}", rr.Image(canvas).compress(jpeg_quality=75))
                 logged_pairs += 1
             except Exception as pair_err:
                 # Skip problematic pairs without breaking the whole pipeline
@@ -230,7 +244,127 @@ try:
 except Exception as e:
     print(f"Match logging to Rerun failed: {e}")
 
+def incremental_mapping_with_pbar(database_path, image_path, sfm_path):
+    with pycolmap.Database(str(database_path)) as database:
+        num_images = database.num_images
+
+    # Simple timeline counter for Rerun so we can scrub the SfM progression
+    step = 0
+
+    def _bump_time():
+        nonlocal step
+        rr.set_time("sfm_step", sequence=step)
+        step += 1
+
+    # Where to write/read intermediate snapshots of the reconstruction
+    snapshot_root = pathlib.Path(sfm_path) / "snapshots"
+    snapshot_root.mkdir(parents=True, exist_ok=True)
+
+    def _latest_snapshot_dir() -> pathlib.Path | None:
+        try:
+            subdirs = [p for p in snapshot_root.iterdir() if p.is_dir()]
+            if not subdirs:
+                return None
+            # Prefer numerically named subfolders; otherwise fall back to mtime
+            numeric = []
+            other = []
+            for p in subdirs:
+                try:
+                    numeric.append((int(p.name), p))
+                except ValueError:
+                    other.append(p)
+            if numeric:
+                return sorted(numeric, key=lambda x: x[0])[-1][1]
+            return max(other, key=lambda p: p.stat().st_mtime)
+        except Exception:
+            return None
+
+    def _log_all_cameras_from_model_dir(model_dir: pathlib.Path) -> None:
+        try:
+            rec = pycolmap.Reconstruction(str(model_dir))
+        except Exception:
+            return
+        # Each call advances the timeline
+        _bump_time()
+        # Log each registered image pose as a Transform3D under camera/{image_name}
+        for img_id, img in rec.images.items():
+            try:
+                name = getattr(img, "name", f"image_{img_id}")
+                T = img.cam_from_world()
+                t = [float(x) for x in T.translation]
+                q_xyzw = [float(x) for x in T.rotation.quat]  # x,y,z,w order
+                rr.log(
+                    f"input/{img_id}",
+                    rr.Transform3D(
+                        translation=t,
+                        rotation=rr.Quaternion(xyzw=q_xyzw),
+                        relation=rr.TransformRelation.ChildFromParent,
+                    ),
+                )
+                # Log the camera intrinsics
+                camera = rec.cameras(img.camera_id)
+                if camera is None:
+                    print(f"Warning: no camera found for image with id {img_id}")
+                rr.log(
+                    f"input/{img_id}/image",
+                    rr.Pinhole(
+                        resolution=[camera.width, camera.height],
+                        focal_length=camera.params[:2],
+                        principal_point=camera.params[2:],
+                    ),
+                )
+            except Exception as e:
+                # Skip any problematic image without failing the whole callback
+                print(f"[{__file__}:318] {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+    # We use enlighten to log progress in the command line
+    with enlighten.Manager() as manager:
+        with manager.counter(
+            total=num_images, desc="Images registered:"
+        ) as pbar:
+            pbar.update(0, force=True)
+            # Configure pipeline to write snapshots at each registration step
+            options = pycolmap.IncrementalPipelineOptions()
+            options.snapshot_path = str(snapshot_root)
+            options.snapshot_frames_freq = 1  # write a snapshot after every registered image
+
+            def on_initial_image_pair():
+                # Try to log cameras from the first snapshot (if any)
+                snap = _latest_snapshot_dir()
+                if snap is not None:
+                    _log_all_cameras_from_model_dir(snap)
+                # Keep CLI progress in sync (initial pair registers 2 images)
+                pbar.update(2)
+
+            def on_next_image():
+                # Log cameras from the latest snapshot so the viewer updates incrementally
+                snap = _latest_snapshot_dir()
+                if snap is not None:
+                    _log_all_cameras_from_model_dir(snap)
+                pbar.update(1)
+
+            reconstructions = pycolmap.incremental_mapping(
+                database_path,
+                image_path,
+                sfm_path,
+                options=options,
+                initial_image_pair_callback=on_initial_image_pair,
+                next_image_callback=on_next_image,
+            )
+    return reconstructions
+
 # # Step 3: Mapper
 # maps = pycolmap.incremental_mapping(database_path, image_dir, output_path)
+recs = incremental_mapping_with_pbar(database_path, image_dir, output_path)
+# alternatively, use:
+# import custom_incremental_pipeline
+# recs = custom_incremental_pipeline.main(
+#     database_path, image_path, sfm_path
+# )
+for idx, rec in recs.items():
+    logging.info(f"#{idx} {rec.summary()}")
 
 # print(maps)
