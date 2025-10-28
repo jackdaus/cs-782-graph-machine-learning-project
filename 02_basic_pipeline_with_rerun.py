@@ -27,20 +27,10 @@ image_paths = sorted([p for p in image_dir.iterdir() if p.is_file() and p.suffix
 # This is not an iterative process, so we can just log everthing as happening in the same logical moment.
 rr.set_time("stable_time", duration=0) 
 
-# for img_path in image_paths:
-#     img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-#     if img is None:
-#         print(f"Warning: failed to read {img_path}")
-#         continue
-#     # Convert BGR -> RGB for correct colors
-#     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-#     # Use the filename stem as the entity path to keep things organized
-#     rr.log(f"input/{img_path.stem}/image", rr.Image(img_rgb).compress(jpeg_quality=75))
-
 pycolmap.set_random_seed(0)
 
 # Step 1: Extract Features
-pycolmap.extract_features(database_path, image_dir, camera_model="OPENCV")
+pycolmap.extract_features(database_path, image_dir, camera_model="OPENCV", camera_mode=pycolmap.CameraMode.SINGLE)
 
 # Log extracted features (keypoints) per image to Rerun
 try:
@@ -289,7 +279,6 @@ def incremental_mapping_with_pbar(database_path, image_path, sfm_path):
         # Log each registered image pose as a Transform3D under camera/{image_name}
         for img_id, img in rec.images.items():
             try:
-                name = getattr(img, "name", f"image_{img_id}")
                 T = img.cam_from_world()
                 t = [float(x) for x in T.translation]
                 q_xyzw = [float(x) for x in T.rotation.quat]  # x,y,z,w order
@@ -302,17 +291,28 @@ def incremental_mapping_with_pbar(database_path, image_path, sfm_path):
                     ),
                 )
                 # Log the camera intrinsics
-                camera = rec.cameras(img.camera_id)
+                camera = rec.cameras[img.camera_id]
                 if camera is None:
                     print(f"Warning: no camera found for image with id {img_id}")
-                rr.log(
-                    f"input/{img_id}/image",
-                    rr.Pinhole(
-                        resolution=[camera.width, camera.height],
-                        focal_length=camera.params[:2],
-                        principal_point=camera.params[2:],
-                    ),
-                )
+                if camera.model == "PINHOLE":
+                    rr.log(
+                        f"input/{img_id}/image",
+                        rr.Pinhole(
+                            resolution=[camera.width, camera.height],
+                            focal_length=camera.params[:2],
+                            principal_point=camera.params[2:],
+                        ),
+                    )
+                else:
+                    # TODO fix this! see https://rerun.io/docs/reference/types/archetypes/pinhole#perspective-pinhole-camera
+                    rr.log(
+                        f"input/{img_id}/image",
+                        rr.Pinhole(
+                            resolution=[camera.width, camera.height],
+                            focal_length=camera.params[:2],
+                            principal_point=camera.params[2:],
+                        ),
+                    )
             except Exception as e:
                 # Skip any problematic image without failing the whole callback
                 print(f"[{__file__}:318] {type(e).__name__}: {e}")
@@ -320,10 +320,34 @@ def incremental_mapping_with_pbar(database_path, image_path, sfm_path):
                 traceback.print_exc()
                 continue
 
+        # Also log the current set of 3D points from the reconstruction snapshot
+        try:
+            if hasattr(rec, "points3D") and len(rec.points3D) > 0:
+                pts = list(rec.points3D.values())
+                # Positions (N,3)
+                positions = np.array([p.xyz for p in pts], dtype=np.float32)
+                # Colors if available (uint8, N,3). Some reconstructions may have zeros if colors not computed yet.
+                try:
+                    colors = np.array([p.color for p in pts], dtype=np.uint8)
+                except Exception:
+                    colors = None
+                # Choose a small constant radius; the absolute scale is arbitrary in SfM
+                rr.log(
+                    "sfm/points",
+                    rr.Points3D(
+                        positions,
+                        colors=colors if colors is not None else None,
+                        radii=0.03,
+                    ),
+                )
+        except Exception as e:
+            # Non-fatal: keep mapping going even if point logging fails for a step
+            print(f"Warning: failed to log 3D points: {e}")
+        
     # We use enlighten to log progress in the command line
     with enlighten.Manager() as manager:
         with manager.counter(
-            total=num_images, desc="Images registered:"
+            total=num_images, desc="Attemped image registrations:"
         ) as pbar:
             pbar.update(0, force=True)
             # Configure pipeline to write snapshots at each registration step
