@@ -1,15 +1,17 @@
 import pathlib
 import pycolmap
+import time
+
+# Paths
+image_dir = pathlib.Path("./data/01_nerf/02_lego_large")
 
 # Create output directory
-output_path = pathlib.Path("./output")
-output_path.mkdir(exist_ok=True)
+run_id = time.time_ns() // 1_000_000
+output_path = pathlib.Path(f"./output/01_nerf/02_lego_large/{run_id}")
+output_path.mkdir(exist_ok=True, parents=True)
 
 # Define db path
 database_path = output_path / "database.db"
-
-# Define path to input images
-image_dir = pathlib.Path("./input/lego")
 
 # Step 1: Extract Features
 pycolmap.extract_features(database_path, image_dir, camera_model='OPENCV')

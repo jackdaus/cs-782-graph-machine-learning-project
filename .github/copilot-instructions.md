@@ -26,7 +26,7 @@ The typical workflow follows the COLMAP pipeline and is executed in notebook cel
     import pathlib
     output_path = pathlib.Path("./output")
     database_path = output_path / "database.db"
-    image_dir = pathlib.Path("./input/lego")
+    image_dir = pathlib.Path("./input/01_lego_small")
     ```
 
 2.  **Feature Extraction**: Extract features from images using `pycolmap.extract_features`.

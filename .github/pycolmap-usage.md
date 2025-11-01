@@ -241,11 +241,11 @@ class pycolmap.Point3D
 ```python
 import pycolmap
 # Feature extraction
-pycolmap.extract_features('output/database.db', 'input/lego')
+pycolmap.extract_features('output/database.db', 'input/01_lego_small')
 # Feature matching
 pycolmap.match_exhaustive('output/database.db')
 # Incremental mapping
-pycolmap.incremental_mapping('output/database.db', 'input/lego', 'output/0')
+pycolmap.incremental_mapping('output/database.db', 'input/01_lego_small', 'output/0')
 # Load and inspect reconstruction
 rec = pycolmap.Reconstruction('output/0')
 print(rec.num_images(), rec.num_points3D())
