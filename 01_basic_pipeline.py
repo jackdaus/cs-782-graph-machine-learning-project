@@ -19,5 +19,3 @@ pycolmap.match_exhaustive(database_path)
 
 # Step 3: Mapper
 maps = pycolmap.incremental_mapping(database_path, image_dir, output_path)
-
-print(maps)
