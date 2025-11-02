@@ -95,6 +95,82 @@ def colmap_3d_points_interactive(reconstruction: Reconstruction, filter_outliers
     fig.show()
 
 
+def plot_image_subsets(reconstruction: Reconstruction, team_a_ids: set[int], team_b_ids: set[int]):
+    # Filter for team A images
+    team_a_images = [image for image in reconstruction.images.values() if image.image_id in team_a_ids]
+    team_b_images = [image for image in reconstruction.images.values() if image.image_id in team_b_ids]
+
+    team_a_camera_centers = np.stack([image.projection_center() for image in team_a_images])
+    team_b_camera_centers = np.stack([image.projection_center() for image in team_b_images])
+
+    team_a_camera_names = [item.name for item in team_a_images]
+    team_b_camera_names = [item.name for item in team_b_images]
+
+    # Plot cameras
+    traces = []
+    traces.append(go.Scatter3d(
+        x=team_a_camera_centers[:, 0],
+        y=team_a_camera_centers[:, 1],
+        z=team_a_camera_centers[:, 2],
+        mode='markers',
+        name='Set A Images',
+        text=team_a_camera_names,  # list of strings used in hover template
+        marker=dict(
+            size=5,
+            color='red',
+            symbol='diamond',
+            opacity=1.0
+        ),
+        hovertemplate='%{text}: %{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>'
+    ))
+    traces.append(go.Scatter3d(
+        x=team_b_camera_centers[:, 0],
+        y=team_b_camera_centers[:, 1],
+        z=team_b_camera_centers[:, 2],
+        mode='markers',
+        name='Set B Images',
+        text=team_b_camera_names,  # list of strings used in hover template
+        marker=dict(
+            size=5,
+            color='blue',
+            symbol='diamond',
+            opacity=1.0
+        ),
+        hovertemplate='%{text}: %{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>'
+    ))
+
+    fig = go.Figure(data=traces)
+
+    # Force a cubic bounding box so the scene renders with equal axes.
+    # combined_xyz = points_3d
+    # if show_cameras and camera_translations.size:
+    #     combined_xyz = np.vstack((combined_xyz, camera_translations))
+
+    combined_xyz = np.vstack((team_a_camera_centers, team_b_camera_centers))
+
+    xyz_min = combined_xyz.min(axis=0)
+    xyz_max = combined_xyz.max(axis=0)
+    xyz_center = (xyz_min + xyz_max) * 0.5
+    xyz_half_range = (xyz_max - xyz_min) * 0.5
+    cube_radius = float(np.max(xyz_half_range)) or 1.0
+
+    x_range = [xyz_center[0] - cube_radius, xyz_center[0] + cube_radius]
+    y_range = [xyz_center[1] - cube_radius, xyz_center[1] + cube_radius]
+    z_range = [xyz_center[2] - cube_radius, xyz_center[2] + cube_radius]
+
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(title='X', range=x_range),
+            yaxis=dict(title='Y', range=y_range),
+            zaxis=dict(title='Z', range=z_range),
+            aspectmode='cube',
+        ),
+        title='Image Subsets',
+        width=500,
+        height=500
+    )
+    fig.show()
+
 def filter_points(reconstruction: Reconstruction, filter_outliers: bool = False) -> np.ndarray:
     points_3d = np.array([p.xyz for p in reconstruction.points3D.values()])
     # Option to filter out outliers to improve visualization clarity
@@ -122,6 +198,7 @@ def filter_points(reconstruction: Reconstruction, filter_outliers: bool = False)
 def get_camera_translations(reconstruction: Reconstruction) -> np.ndarray:
     camera_centers = [image.projection_center() for image in reconstruction.images.values()]
     return np.stack(camera_centers)
+
 
 def get_camera_filenames(reconstruction: Reconstruction) -> list[str]:
     # Get camera file names
