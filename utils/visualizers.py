@@ -9,7 +9,6 @@ def colmap_3d_points(reconstruction: Reconstruction, filter_outliers: bool = Fal
 
     # Extract camera positions
     camera_translations = get_camera_translations(reconstruction)
-
     fig = plt.figure(figsize=(5, 5))
     ax = fig.add_subplot(111, projection='3d')
     ax.scatter(points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
@@ -121,8 +120,7 @@ def filter_points(reconstruction: Reconstruction, filter_outliers: bool = False)
 
 
 def get_camera_translations(reconstruction: Reconstruction) -> np.ndarray:
-    # Camera positions need the inverse transform (world_from_cam) to recover centers
-    camera_centers = [image.cam_from_world().inverse().translation for image in reconstruction.images.values()]
+    camera_centers = [image.projection_center() for image in reconstruction.images.values()]
     return np.stack(camera_centers)
 
 def get_camera_filenames(reconstruction: Reconstruction) -> list[str]:
