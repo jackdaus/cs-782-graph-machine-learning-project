@@ -24,10 +24,14 @@ def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], lis
     team_a: set = {captain_a_id}
     team_b: set = {captain_b_id}
 
-    # To start easy, let's just do a random drafting strategy. We might improve this later by doing something like
+    # To start simple, let's just do a random drafting strategy. We might improve this later by doing something like
     # drafting nearest neighbors.
     covisible_captain_a = set(get_covisible_image_ids(reconstruction, captain_a_id))
     covisible_captain_b = set(get_covisible_image_ids(reconstruction, captain_b_id))
+
+    # Just in case, make sure that our captains are not covisible to each other
+    covisible_captain_a.discard(captain_b_id)
+    covisible_captain_b.discard(captain_a_id)
 
     # Iterate until teams cannot draft anymore
     team_a_valid_draft_choices = covisible_captain_a & draft_pool
