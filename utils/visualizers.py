@@ -67,11 +67,27 @@ def colmap_3d_points_interactive(reconstruction: Reconstruction, filter_outliers
 
     fig = go.Figure(data=traces)
 
+    # Force a cubic bounding box so the scene renders with equal axes.
+    combined_xyz = points_3d
+    if show_cameras and camera_translations.size:
+        combined_xyz = np.vstack((combined_xyz, camera_translations))
+
+    xyz_min = combined_xyz.min(axis=0)
+    xyz_max = combined_xyz.max(axis=0)
+    xyz_center = (xyz_min + xyz_max) * 0.5
+    xyz_half_range = (xyz_max - xyz_min) * 0.5
+    cube_radius = float(np.max(xyz_half_range)) or 1.0
+
+    x_range = [xyz_center[0] - cube_radius, xyz_center[0] + cube_radius]
+    y_range = [xyz_center[1] - cube_radius, xyz_center[1] + cube_radius]
+    z_range = [xyz_center[2] - cube_radius, xyz_center[2] + cube_radius]
+
     fig.update_layout(
         scene=dict(
-            xaxis_title='X',
-            yaxis_title='Y',
-            zaxis_title='Z'
+            xaxis=dict(title='X', range=x_range),
+            yaxis=dict(title='Y', range=y_range),
+            zaxis=dict(title='Z', range=z_range),
+            aspectmode='cube',
         ),
         title='Interactive 3D Points from COLMAP Reconstruction',
         width=500,
@@ -105,11 +121,9 @@ def filter_points(reconstruction: Reconstruction, filter_outliers: bool = False)
 
 
 def get_camera_translations(reconstruction: Reconstruction) -> np.ndarray:
-    # Get camera positions in world coordinates
-    camera_translations = [item.cam_from_world().translation for item in reconstruction.images.values()]
-    # Convert to numpy array (rows are cameras, columns are translations of x,y,z coordinates)
-    camera_translations = np.stack(camera_translations)
-    return camera_translations
+    # Camera positions need the inverse transform (world_from_cam) to recover centers
+    camera_centers = [image.cam_from_world().inverse().translation for image in reconstruction.images.values()]
+    return np.stack(camera_centers)
 
 def get_camera_filenames(reconstruction: Reconstruction) -> list[str]:
     # Get camera file names

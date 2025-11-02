@@ -14,7 +14,7 @@ output_path.mkdir(exist_ok=True, parents=True)
 database_path = output_path / "database.db"
 
 # Step 1: Extract Features
-pycolmap.extract_features(database_path, image_dir, camera_model='OPENCV')
+pycolmap.extract_features(database_path, image_dir, camera_model='OPENCV', camera_mode=pycolmap.CameraMode.SINGLE)
 
 # Step 2: Feature Matching
 pycolmap.match_exhaustive(database_path)
