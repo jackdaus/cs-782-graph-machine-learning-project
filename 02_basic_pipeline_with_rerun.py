@@ -86,7 +86,7 @@ try:
             else:
                 return 2147483647 * image_id1 + image_id2
 
-        # Collect candidate pairs to visualize. We try consecutive images by name order
+        # Collect candidate pairs to vis. We try consecutive images by name order
         # and fall back to scanning a subset of all pairs.
         pairs_to_try = []
         ordered_names = [p.name for p in image_paths]

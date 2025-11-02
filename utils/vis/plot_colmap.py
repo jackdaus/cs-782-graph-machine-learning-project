@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from plotly import graph_objs as go
 from pycolmap import Reconstruction
 import plotly.graph_objs as go
 
-def colmap_3d_points(reconstruction: Reconstruction, filter_outliers: bool = False, show_cameras: bool = False):
+def plot_colmap_points3D(reconstruction: Reconstruction, filter_outliers: bool = False, show_cameras: bool = False):
     # Extract 3D point coordinates
     points_3d = filter_points(reconstruction, filter_outliers)
 
@@ -23,76 +24,6 @@ def colmap_3d_points(reconstruction: Reconstruction, filter_outliers: bool = Fal
     ax.set_aspect('equal', adjustable='box')
     plt.tight_layout()
     plt.show()
-
-
-def colmap_3d_points_interactive(reconstruction: Reconstruction, filter_outliers: bool = False, show_cameras: bool = False):
-    # Extract 3D point coordinates
-    points_3d = filter_points(reconstruction, filter_outliers)
-
-    # Extract camera positions
-    camera_translations = get_camera_translations(reconstruction)
-    camera_names = get_camera_filenames(reconstruction)
-
-    traces = [go.Scatter3d(
-        x=points_3d[:, 0],
-        y=points_3d[:, 1],
-        z=points_3d[:, 2],
-        mode='markers',
-        marker=dict(
-            size=2,
-            color=points_3d[:, 2],  # Color by Z value for effect
-            colorscale='Viridis',
-            opacity=0.7
-        ),
-        hovertemplate='3d point: %{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>'
-    )]
-
-    if show_cameras:
-        traces.append(go.Scatter3d(
-            x=camera_translations[:, 0],
-            y=camera_translations[:, 1],
-            z=camera_translations[:, 2],
-            mode='markers',
-            name='cameras',
-            text=camera_names,  # list of strings used in hovertemplate
-            marker=dict(
-                size=5,
-                color=camera_translations[:, 2],
-                symbol='diamond',
-                opacity=1.0
-            ),
-            hovertemplate='%{text}: %{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>'
-        ))
-
-    fig = go.Figure(data=traces)
-
-    # Force a cubic bounding box so the scene renders with equal axes.
-    combined_xyz = points_3d
-    if show_cameras and camera_translations.size:
-        combined_xyz = np.vstack((combined_xyz, camera_translations))
-
-    xyz_min = combined_xyz.min(axis=0)
-    xyz_max = combined_xyz.max(axis=0)
-    xyz_center = (xyz_min + xyz_max) * 0.5
-    xyz_half_range = (xyz_max - xyz_min) * 0.5
-    cube_radius = float(np.max(xyz_half_range)) or 1.0
-
-    x_range = [xyz_center[0] - cube_radius, xyz_center[0] + cube_radius]
-    y_range = [xyz_center[1] - cube_radius, xyz_center[1] + cube_radius]
-    z_range = [xyz_center[2] - cube_radius, xyz_center[2] + cube_radius]
-
-    fig.update_layout(
-        scene=dict(
-            xaxis=dict(title='X', range=x_range),
-            yaxis=dict(title='Y', range=y_range),
-            zaxis=dict(title='Z', range=z_range),
-            aspectmode='cube',
-        ),
-        title='Interactive 3D Points from COLMAP Reconstruction',
-        width=500,
-        height=500
-    )
-    fig.show()
 
 
 def plot_image_subsets(reconstruction: Reconstruction, team_a_ids: set[int], team_b_ids: set[int]):
@@ -204,3 +135,73 @@ def get_camera_filenames(reconstruction: Reconstruction) -> list[str]:
     # Get camera file names
     camera_filenames = [item.name for item in reconstruction.images.values()]
     return camera_filenames
+
+
+def plot_colmap_points3D_interactive(reconstruction: Reconstruction, filter_outliers: bool = False, show_cameras: bool = False):
+    # Extract 3D point coordinates
+    points_3d = filter_points(reconstruction, filter_outliers)
+
+    # Extract camera positions
+    camera_translations = get_camera_translations(reconstruction)
+    camera_names = get_camera_filenames(reconstruction)
+
+    traces = [go.Scatter3d(
+        x=points_3d[:, 0],
+        y=points_3d[:, 1],
+        z=points_3d[:, 2],
+        mode='markers',
+        marker=dict(
+            size=2,
+            color=points_3d[:, 2],  # Color by Z value for effect
+            colorscale='Viridis',
+            opacity=0.7
+        ),
+        hovertemplate='3d point: %{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>'
+    )]
+
+    if show_cameras:
+        traces.append(go.Scatter3d(
+            x=camera_translations[:, 0],
+            y=camera_translations[:, 1],
+            z=camera_translations[:, 2],
+            mode='markers',
+            name='cameras',
+            text=camera_names,  # list of strings used in hovertemplate
+            marker=dict(
+                size=5,
+                color=camera_translations[:, 2],
+                symbol='diamond',
+                opacity=1.0
+            ),
+            hovertemplate='%{text}: %{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>'
+        ))
+
+    fig = go.Figure(data=traces)
+
+    # Force a cubic bounding box so the scene renders with equal axes.
+    combined_xyz = points_3d
+    if show_cameras and camera_translations.size:
+        combined_xyz = np.vstack((combined_xyz, camera_translations))
+
+    xyz_min = combined_xyz.min(axis=0)
+    xyz_max = combined_xyz.max(axis=0)
+    xyz_center = (xyz_min + xyz_max) * 0.5
+    xyz_half_range = (xyz_max - xyz_min) * 0.5
+    cube_radius = float(np.max(xyz_half_range)) or 1.0
+
+    x_range = [xyz_center[0] - cube_radius, xyz_center[0] + cube_radius]
+    y_range = [xyz_center[1] - cube_radius, xyz_center[1] + cube_radius]
+    z_range = [xyz_center[2] - cube_radius, xyz_center[2] + cube_radius]
+
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(title='X', range=x_range),
+            yaxis=dict(title='Y', range=y_range),
+            zaxis=dict(title='Z', range=z_range),
+            aspectmode='cube',
+        ),
+        title='Interactive 3D Points from COLMAP Reconstruction',
+        width=500,
+        height=500
+    )
+    fig.show()

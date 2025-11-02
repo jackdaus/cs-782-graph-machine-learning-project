@@ -4,27 +4,6 @@ from pycolmap import Reconstruction
 import random
 import utils
 
-# Let's turn that into a function
-def get_covisible_image_ids(reconstruction: Reconstruction, image_id: int) -> list[int]:
-    image = reconstruction.image(image_id)
-    # Get all visible Point3D for this image
-    visible_point3D_ids = [point2D.point3D_id for point2D in image.get_observation_points2D()]
-
-    # Find all other images that can see this same Point3D
-    covisible_image_ids = set()
-    for point3D_id in visible_point3D_ids:
-        # Get the Point3D object from the map
-        point3D = reconstruction.point3D(point3D_id)
-        # Get the track associated with this Point3D
-        track = point3D.track
-        # Each track has 2 or more elements. These elements are the other images that see this Point3D.
-        for track_element in track.elements:
-            covisible_image_ids.add(track_element.image_id)
-    # Remove the original query imageid. We don't want this in the set!
-    covisible_image_ids.remove(image_id)
-    return list(covisible_image_ids)
-
-
 def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], list[int]]:
     # TODO: select different team captains based on some heuristic (e.g., 2 most distant images)
     # TODO: improve this algorithm! Right now, we can sometimes be left with images that are not added to any team. This is
@@ -47,8 +26,8 @@ def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], lis
 
     # To start easy, let's just do a random drafting strategy. We might improve this later by doing something like
     # drafting nearest neighbors.
-    covisible_captain_a = set(utils.get_covisible_image_ids(reconstruction, captain_a_id))
-    covisible_captain_b = set(utils.get_covisible_image_ids(reconstruction, captain_b_id))
+    covisible_captain_a = set(get_covisible_image_ids(reconstruction, captain_a_id))
+    covisible_captain_b = set(get_covisible_image_ids(reconstruction, captain_b_id))
 
     # Iterate until teams cannot draft anymore
     team_a_valid_draft_choices = covisible_captain_a & draft_pool
@@ -72,3 +51,23 @@ def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], lis
     # Sanity check: our teams should not have any shared members!
     assert team_a.isdisjoint(team_b)
     return list(team_a), list(team_b)
+
+
+def get_covisible_image_ids(reconstruction: Reconstruction, image_id: int) -> list[int]:
+    image = reconstruction.image(image_id)
+    # Get all visible Point3D for this image
+    visible_point3D_ids = [point2D.point3D_id for point2D in image.get_observation_points2D()]
+
+    # Find all other images that can see this same Point3D
+    covisible_image_ids = set()
+    for point3D_id in visible_point3D_ids:
+        # Get the Point3D object from the map
+        point3D = reconstruction.point3D(point3D_id)
+        # Get the track associated with this Point3D
+        track = point3D.track
+        # Each track has 2 or more elements. These elements are the other images that see this Point3D.
+        for track_element in track.elements:
+            covisible_image_ids.add(track_element.image_id)
+    # Remove the original query imageid. We don't want this in the set!
+    covisible_image_ids.remove(image_id)
+    return list(covisible_image_ids)
