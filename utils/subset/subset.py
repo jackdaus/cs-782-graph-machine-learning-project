@@ -1,8 +1,10 @@
 # Utilities for creating subsets of COLMAP reconstructions
-
 from pycolmap import Reconstruction
 import random
 import utils
+import torch
+from torch_geometric.data import Data
+import numpy as np 
 
 def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], list[int]]:
     # TODO: select different team captains based on some heuristic (e.g., 2 most distant images)
@@ -14,7 +16,7 @@ def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], lis
 
     # Sample (without replacement!) the two team captains
     captain_a_id, captain_b_id = random.sample(list(draft_pool), 2)
-    print(f"Captain A: {captain_a_id}\nCaptain B: {captain_b_id}")
+    # print(f"Captain A: {captain_a_id}\nCaptain B: {captain_b_id}")
 
     # Remove our captains from the pool
     draft_pool.remove(captain_a_id)
@@ -75,3 +77,40 @@ def get_covisible_image_ids(reconstruction: Reconstruction, image_id: int) -> li
     # Remove the original query imageid. We don't want this in the set!
     covisible_image_ids.remove(image_id)
     return list(covisible_image_ids)
+
+
+def reconstruction_to_pyg_data(reconstruction: Reconstruction, filtered_image_ids: list[int] = None) -> Data:
+    # Get all the image_ids from this Reconstruction
+    all_image_ids = list(reconstruction.images.keys())
+
+    # If no image_ids were provided, then we use all images in the Reconstruction
+    if filtered_image_ids is None:
+        filtered_image_ids = all_image_ids # TODO make sure this not a reference type!
+
+    assert set(filtered_image_ids).issubset(set(all_image_ids))
+
+    # Calculate per node features. For now, we will just use the image positions as our node features 
+    image_centers = [image.projection_center() for image in reconstruction.images.values() if image.image_id in filtered_image_ids]
+    # x = torch.tensor(image_centers, dtype=torch.float)
+    x = torch.from_numpy(np.array(image_centers)).float()
+    
+    # Create a map between the image_id and index in the list
+    image_id_to_idx = {image_id: idx for idx, image_id in enumerate(filtered_image_ids)}
+
+    # Initialize our lists for the edges. Source node and destination node. 
+    # (The graph is undirected, so "src" and "dst" labels are just for convention here.)
+    src, dst = [], []
+    # For each image in set A...
+    for src_id in filtered_image_ids:
+        # Get all other images that have tracks linked to the source image
+        for dst_id in utils.subset.get_covisible_image_ids(reconstruction, src_id):
+            # We want to make sure the 
+            if dst_id in image_id_to_idx:
+                src.append(image_id_to_idx[src_id])
+                dst.append(image_id_to_idx[dst_id])
+    # Create the edge index matrix. PyG expects a matrix of shape (2, E) 
+    edge_index = torch.tensor([src, dst], dtype=torch.long)
+    
+    data = Data(x=x, edge_index=edge_index)
+    return data
+

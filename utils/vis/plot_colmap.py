@@ -9,7 +9,7 @@ def plot_colmap_points3D(reconstruction: Reconstruction, filter_outliers: bool =
     points_3d = filter_points(reconstruction, filter_outliers)
 
     # Extract camera positions
-    camera_translations = get_camera_translations(reconstruction)
+    camera_translations = get_image_translations(reconstruction)
     fig = plt.figure(figsize=(5, 5))
     ax = fig.add_subplot(111, projection='3d')
     ax.scatter(points_3d[:, 0], points_3d[:, 1], points_3d[:, 2],
@@ -126,9 +126,9 @@ def filter_points(reconstruction: Reconstruction, filter_outliers: bool = False)
     return points_3d
 
 
-def get_camera_translations(reconstruction: Reconstruction) -> np.ndarray:
-    camera_centers = [image.projection_center() for image in reconstruction.images.values()]
-    return np.stack(camera_centers)
+def get_image_translations(reconstruction: Reconstruction) -> np.ndarray:
+    image_centers = [image.projection_center() for image in reconstruction.images.values()]
+    return np.stack(image_centers)
 
 
 def get_camera_filenames(reconstruction: Reconstruction) -> list[str]:
@@ -142,7 +142,7 @@ def plot_colmap_points3D_interactive(reconstruction: Reconstruction, filter_outl
     points_3d = filter_points(reconstruction, filter_outliers)
 
     # Extract camera positions
-    camera_translations = get_camera_translations(reconstruction)
+    camera_translations = get_image_translations(reconstruction)
     camera_names = get_camera_filenames(reconstruction)
 
     traces = [go.Scatter3d(
