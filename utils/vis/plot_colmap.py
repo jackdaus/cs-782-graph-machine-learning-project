@@ -27,7 +27,6 @@ def plot_colmap_points3D(reconstruction: Reconstruction, filter_outliers: bool =
 
 
 def plot_image_subsets(reconstruction: Reconstruction, team_a_ids: set[int], team_b_ids: set[int]):
-    # Filter for team A images
     team_a_images = [image for image in reconstruction.images.values() if image.image_id in team_a_ids]
     team_b_images = [image for image in reconstruction.images.values() if image.image_id in team_b_ids]
 
@@ -150,6 +149,7 @@ def plot_colmap_points3D_interactive(reconstruction: Reconstruction, filter_outl
         y=points_3d[:, 1],
         z=points_3d[:, 2],
         mode='markers',
+        name='3D Points',
         marker=dict(
             size=2,
             color=points_3d[:, 2],  # Color by Z value for effect
