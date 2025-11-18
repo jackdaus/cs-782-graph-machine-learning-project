@@ -7,8 +7,6 @@ from torch_geometric.data import Data
 import numpy as np 
 
 def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], list[int]]:
-    # TODO: select different team captains based on some heuristic (e.g., 2 most distant images)
-    # TODO: improve this algorithm! Right now, we can sometimes be left with images that are not added to any team. This is
     # because neither team captain can see them. We need to do something more sophisticated, like build a minimum spanning tree kinda thing
 
     # Create a set for all images indexes that we can draft from
@@ -55,6 +53,105 @@ def sample_image_subsets(reconstruction: Reconstruction) -> tuple[list[int], lis
             team_b.add(draft_choice)
 
     # Sanity check: our teams should not have any shared members!
+    assert team_a.isdisjoint(team_b)
+    return list(team_a), list(team_b)
+
+
+def create_image_subsets_from_distance(reconstruction: Reconstruction, team_size_limit: int = None, random_captains: bool = False) -> tuple[list[int], list[int]]:
+    """
+    Creates two disjoint subsets of images from a reconstruction using a distance-based drafting approach.
+
+    The process is as follows:
+    1. The two most distant images are chosen as "team captains".
+    2. Teams take turns drafting new members.
+    3. A team drafts the available image that is covisible with any of its current members and is closest to one of them.
+    4. Drafting stops when no more valid candidates are available or team size limits are reached.
+
+    Args:
+        reconstruction: The COLMAP reconstruction.
+        team_size_limit: An optional maximum size for each team.
+        random_captains: If True, select team captains randomly. Otherwise, select the two most distant images.
+
+    Returns:
+        A tuple containing two lists of image IDs for team A and team B.
+    """
+    all_images = reconstruction.images
+    image_ids = list(all_images.keys())
+
+    if len(image_ids) < 2:
+        return image_ids, []
+
+    if random_captains:
+        captain_a_id, captain_b_id = random.sample(image_ids, 2)
+    else:
+        # Find the two most distant images to be captains
+        max_dist = -1
+        captains = (-1, -1)
+        for i in range(len(image_ids)):
+            for j in range(i + 1, len(image_ids)):
+                id1, id2 = image_ids[i], image_ids[j]
+                dist = np.linalg.norm(all_images[id1].projection_center() - all_images[id2].projection_center())
+                if dist > max_dist:
+                    max_dist = dist
+                    captains = (id1, id2)
+
+        captain_a_id, captain_b_id = captains
+
+    draft_pool = set(image_ids)
+    draft_pool.remove(captain_a_id)
+    draft_pool.remove(captain_b_id)
+
+    team_a = {captain_a_id}
+    team_b = {captain_b_id}
+
+    while True:
+        drafted_in_round = False
+
+        # Team A draft
+        if not team_size_limit or len(team_a) < team_size_limit:
+            all_covisible_a = set().union(*(get_covisible_image_ids(reconstruction, member_id) for member_id in team_a))
+            candidates_a = all_covisible_a & draft_pool
+
+            best_pick_a = None
+            min_dist_a = float('inf')
+
+            if candidates_a:
+                for candidate_id in candidates_a:
+                    candidate_center = all_images[candidate_id].projection_center()
+                    dist_to_team = min(np.linalg.norm(candidate_center - all_images[member_id].projection_center()) for member_id in team_a)
+                    if dist_to_team < min_dist_a:
+                        min_dist_a = dist_to_team
+                        best_pick_a = candidate_id
+
+                if best_pick_a:
+                    team_a.add(best_pick_a)
+                    draft_pool.remove(best_pick_a)
+                    drafted_in_round = True
+
+        # Team B draft
+        if not team_size_limit or len(team_b) < team_size_limit:
+            all_covisible_b = set().union(*(get_covisible_image_ids(reconstruction, member_id) for member_id in team_b))
+            candidates_b = all_covisible_b & draft_pool
+
+            best_pick_b = None
+            min_dist_b = float('inf')
+
+            if candidates_b:
+                for candidate_id in candidates_b:
+                    candidate_center = all_images[candidate_id].projection_center()
+                    dist_to_team = min(np.linalg.norm(candidate_center - all_images[member_id].projection_center()) for member_id in team_b)
+                    if dist_to_team < min_dist_b:
+                        min_dist_b = dist_to_team
+                        best_pick_b = candidate_id
+
+                if best_pick_b:
+                    team_b.add(best_pick_b)
+                    draft_pool.remove(best_pick_b)
+                    drafted_in_round = True
+
+        if not drafted_in_round:
+            break
+
     assert team_a.isdisjoint(team_b)
     return list(team_a), list(team_b)
 
@@ -113,4 +210,3 @@ def reconstruction_to_pyg_data(reconstruction: Reconstruction, filtered_image_id
     
     data = Data(x=x, edge_index=edge_index)
     return data
-
