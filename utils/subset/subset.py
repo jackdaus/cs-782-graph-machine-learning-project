@@ -81,6 +81,9 @@ def create_image_subsets_from_distance(reconstruction: Reconstruction, team_size
     if len(image_ids) < 2:
         return image_ids, []
 
+    # Pre-compute projection centers for all images
+    centers = {id: img.projection_center() for id, img in all_images.items()}
+
     if random_captains:
         captain_a_id, captain_b_id = random.sample(image_ids, 2)
     else:
@@ -90,7 +93,7 @@ def create_image_subsets_from_distance(reconstruction: Reconstruction, team_size
         for i in range(len(image_ids)):
             for j in range(i + 1, len(image_ids)):
                 id1, id2 = image_ids[i], image_ids[j]
-                dist = np.linalg.norm(all_images[id1].projection_center() - all_images[id2].projection_center())
+                dist = np.linalg.norm(centers[id1] - centers[id2])
                 if dist > max_dist:
                     max_dist = dist
                     captains = (id1, id2)
@@ -104,21 +107,26 @@ def create_image_subsets_from_distance(reconstruction: Reconstruction, team_size
     team_a = {captain_a_id}
     team_b = {captain_b_id}
 
+    # Pre-compute covisibility for all images
+    covisibility_graph = {id: set(get_covisible_image_ids(reconstruction, id)) for id in image_ids}
+
     while True:
         drafted_in_round = False
 
         # Team A draft
         if not team_size_limit or len(team_a) < team_size_limit:
-            all_covisible_a = set().union(*(get_covisible_image_ids(reconstruction, member_id) for member_id in team_a))
+            all_covisible_a = set().union(*(covisibility_graph[member_id] for member_id in team_a))
             candidates_a = all_covisible_a & draft_pool
 
             best_pick_a = None
             min_dist_a = float('inf')
 
             if candidates_a:
+                team_a_centers = np.array([centers[id] for id in team_a])
                 for candidate_id in candidates_a:
-                    candidate_center = all_images[candidate_id].projection_center()
-                    dist_to_team = min(np.linalg.norm(candidate_center - all_images[member_id].projection_center()) for member_id in team_a)
+                    candidate_center = centers[candidate_id]
+                    # Use numpy broadcasting to find min distance to team
+                    dist_to_team = np.linalg.norm(candidate_center - team_a_centers, axis=1).min()
                     if dist_to_team < min_dist_a:
                         min_dist_a = dist_to_team
                         best_pick_a = candidate_id
@@ -130,16 +138,17 @@ def create_image_subsets_from_distance(reconstruction: Reconstruction, team_size
 
         # Team B draft
         if not team_size_limit or len(team_b) < team_size_limit:
-            all_covisible_b = set().union(*(get_covisible_image_ids(reconstruction, member_id) for member_id in team_b))
+            all_covisible_b = set().union(*(covisibility_graph[member_id] for member_id in team_b))
             candidates_b = all_covisible_b & draft_pool
 
             best_pick_b = None
             min_dist_b = float('inf')
 
             if candidates_b:
+                team_b_centers = np.array([centers[id] for id in team_b])
                 for candidate_id in candidates_b:
-                    candidate_center = all_images[candidate_id].projection_center()
-                    dist_to_team = min(np.linalg.norm(candidate_center - all_images[member_id].projection_center()) for member_id in team_b)
+                    candidate_center = centers[candidate_id]
+                    dist_to_team = np.linalg.norm(candidate_center - team_b_centers, axis=1).min()
                     if dist_to_team < min_dist_b:
                         min_dist_b = dist_to_team
                         best_pick_b = candidate_id
