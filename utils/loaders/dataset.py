@@ -1,8 +1,14 @@
+from typing import List
+
 import torch
 from torch_geometric.data import Data, Dataset
 from torch_geometric.loader import DataLoader
 
 class GraphPairDataset(Dataset):
+    g_list_1: List[Data]  # Declare the attribute with its type
+    g_list_2: List[Data]
+    labels: List[torch.Tensor]
+
     def __init__(self, g_list_1, g_list_2, label_list):
         assert(len(g_list_1) == len(g_list_2) and len(g_list_1) == len(label_list))
         super().__init__()
