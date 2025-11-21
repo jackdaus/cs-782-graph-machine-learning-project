@@ -12,3 +12,15 @@ To run the experimental setup,
 ```bash
 uv run .\01_basic_pipeline.py
 ```
+
+## Saving PyG datasets
+
+`GraphPairDataset` instances can be serialized once and reloaded without rebuilding:
+
+```python
+dataset.save("data/data.pt")
+# Later, on a trusted file
+dataset = GraphPairDataset.load("data/data.pt", map_location="cpu")
+```
+
+PyTorch 2.6+ defaults `torch.load` to `weights_only=True`, which triggers an `UnpicklingError` for PyG classes such as `torch_geometric.data.data.DataEdgeAttr`. Our loader automatically allowlists those globals and, if needed, falls back to `weights_only=False` with a warning—only do this for checkpoints you trust to avoid arbitrary code execution.
