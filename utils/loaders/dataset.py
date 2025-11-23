@@ -11,6 +11,21 @@ try:
 except ImportError:  # older torch versions
     add_safe_globals = None
 
+class DataSfm(Data):
+    """A PyG Data class extended with SfM-specific attributes."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # SfM-specific attributes
+        # self.image_ids: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes]
+        # self.camera_ids: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes]
+        # self.point3D_ids: Optional[torch.Tensor] = None  # Tensor of shape [num_edges]
+        self.translation_vector: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes, 3]
+        self.rotation_quaternion: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes, 4]
+        self.image_tensors: Optional[List[torch.Tensor]] = None  # List of length num_nodes
+        self.image_paths: Optional[List[str]] = None  # List of length num_nodes
+        self.image_files: Optional[List] = None  # List of length num_nodes
+
 class GraphPairDataset(Dataset):
     g_list_1: List[Data]  # Declare the attribute with its type
     g_list_2: List[Data]
