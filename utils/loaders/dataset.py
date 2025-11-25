@@ -2,6 +2,7 @@ from typing import List, Optional
 import warnings
 from pickle import UnpicklingError
 
+import pycolmap
 import torch
 from torch_geometric.data import Data, Dataset
 from torch_geometric.data.data import DataEdgeAttr
@@ -17,14 +18,39 @@ class DataSfm(Data):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # SfM-specific attributes
-        # self.image_ids: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes]
-        # self.camera_ids: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes]
-        # self.point3D_ids: Optional[torch.Tensor] = None  # Tensor of shape [num_edges]
-        self.translation_vector: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes, 3]
-        self.rotation_quaternion: Optional[torch.Tensor] = None  # Tensor of shape [num_nodes, 4]
-        self.image_tensors: Optional[List[torch.Tensor]] = None  # List of length num_nodes
+        self.image_features: Optional[torch.Tensor] = None  # List of length num_nodes
+        self.rigid3d: Optional[List[pycolmap.Rigid3d]] = None # List of length num_nodes
+        # self.image_tensors: Optional[List[torch.Tensor]] = None  # List of length num_nodes
         self.image_paths: Optional[List[str]] = None  # List of length num_nodes
         self.image_files: Optional[List] = None  # List of length num_nodes
+
+class SfmPairDataset(Dataset):
+    g_list_1: List[DataSfm]
+    g_list_2: List[DataSfm]
+    # labels_rigid3d: List[pycolmap.Rigid3d]
+    labels_translations: List[torch.Tensor]
+    labels_quat_xyzw: List[torch.Tensor]
+
+    def __init__(self, g_list_1: List[DataSfm],
+                 g_list_2: List[DataSfm],
+                 labels_translations: List[torch.Tensor],
+                 labels_quat_xyzw: List[torch.Tensor]):
+        assert(len(g_list_1) == len(g_list_2) and len(g_list_1) == len(labels_translations))
+        super().__init__()
+        self.g_list_1 = g_list_1
+        self.g_list_2 = g_list_2
+        self.labels_translations = labels_translations
+        self.labels_quat_xyzw = labels_quat_xyzw
+
+    def len(self):
+        return len(self.labels_translations)
+
+    def get(self, idx):
+        data_1 = self.g_list_1[idx]
+        data_2 = self.g_list_2[idx]
+        label_trans = self.labels_translations[idx]
+        label_quat_xyzw = self.labels_quat_xyzw[idx]
+        return data_1, data_2, label_trans, label_quat_xyzw
 
 class GraphPairDataset(Dataset):
     g_list_1: List[Data]  # Declare the attribute with its type

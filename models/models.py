@@ -23,8 +23,9 @@ class GraphEmbeddingGCN_v1(nn.Module):
         return h
 
 
-# This is a super simple network that takes a graph as input, and outputs a single scalar
+# This is a super simple network that takes a graph as input, and outputs 3 scalars (x, y, z translation)
 class SiameseGCN_v1(nn.Module):
+    """A Siamese GCN model that predicts (x, y, z) translation between two graphs."""
     def __init__(self, num_node_features: int):
         super().__init__()
         # Create twin branches that process each graph in tandem
@@ -34,8 +35,9 @@ class SiameseGCN_v1(nn.Module):
 
         # This next part will take as input the embeddings from the sister network
         # self.conv1 = GCNConv(graph_embedding_dim * 2, 4)
-        self.linear1 = nn.Linear(graph_embedding_dim * 2, 8)
-        self.linear2 = nn.Linear(graph_embedding_dim * 2, 8)
+        # TODO these linear layers are not used, remove?
+        # self.linear1 = nn.Linear(graph_embedding_dim * 2, 8)
+        # self.linear2 = nn.Linear(graph_embedding_dim * 2, 8)
         self.mlp = nn.Sequential(
             nn.Linear(graph_embedding_dim * 2, 8),
             nn.ReLU(),
@@ -54,4 +56,48 @@ class SiameseGCN_v1(nn.Module):
         h = torch.cat((e1, e2), dim=1)
         # Run through an MLP to predict 3
         h = self.mlp(h)
+        return h
+
+
+class SiameseGCN_v2(nn.Module):
+    """A Siamese GCN model that predicts (x, y, z) translation and (x, y, z, q) quat rotation between two graphs."""
+    def __init__(self, num_node_features: int):
+        super().__init__()
+        # Create twin branches that process each graph in tandem
+        graph_embedding_dim = 4
+        self.sisterA = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
+        self.sisterB = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
+
+        # This next part will take as input the embeddings from the sister network
+        # self.linear1 = nn.Linear(graph_embedding_dim * 2, 8)
+        # self.linear2 = nn.Linear(graph_embedding_dim * 2, 8)
+        self.mlp_translation = nn.Sequential(
+            nn.Linear(graph_embedding_dim * 2, 8),
+            nn.ReLU(),
+            nn.Linear(8, 8),
+            nn.ReLU(),
+            # Output 3 scalars for (x, y, z) translation prediction
+            nn.Linear(8, 3)
+        )
+        self.mlp_rotation = nn.Sequential(
+            nn.Linear(graph_embedding_dim * 2, 8),
+            nn.ReLU(),
+            nn.Linear(8, 8),
+            nn.ReLU(),
+            # Output 4 scalars for (x, y, z, w) quat rotation prediction
+            nn.Linear(8, 4)
+        )
+
+    def forward(self, graph_data_1: torch_geometric.data.Data, graph_data_2: torch_geometric.data.Data) -> tuple[torch.Tensor, torch.Tensor]:
+        # Project graph1 and graph2 into the "embedding space" (idk if this is properly called an embedding space...)
+        e1 = self.sisterA(graph_data_1)
+        e2 = self.sisterB(graph_data_2)
+
+        # Concatenate the features
+        h = torch.cat((e1, e2), dim=1)
+        # Run through an MLP to predict translation
+        h_translation = self.mlp_translation(h)
+        h_rotation = self.mlp_rotation(h)
+        # Join both outputs into a tuple
+        h = (h_translation, h_rotation)
         return h
