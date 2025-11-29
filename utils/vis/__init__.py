@@ -1,2 +1,2 @@
 from .plot_colmap import plot_colmap_points3D, plot_colmap_points3D_interactive, plot_image_subsets, get_image_translations
-from .plot_graph import plot_networkx, plot_3D_graph, plot_3D_graph_subplots, plot_many_3D_graphs
+from .plot_graph import plot_networkx, plot_3D_graph, plot_3D_graph_subplots, plot_many_3D_graphs, plot_many_3D_graphs_sfm

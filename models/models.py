@@ -61,10 +61,9 @@ class SiameseGCN_v1(nn.Module):
 
 class SiameseGCN_v2(nn.Module):
     """A Siamese GCN model that predicts (x, y, z) translation and (x, y, z, q) quat rotation between two graphs."""
-    def __init__(self, num_node_features: int):
+    def __init__(self, num_node_features: int, graph_embedding_dim: int = 4):
         super().__init__()
         # Create twin branches that process each graph in tandem
-        graph_embedding_dim = 4
         self.sisterA = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
         self.sisterB = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
 

@@ -7,6 +7,9 @@ from plotly.subplots import make_subplots
 import numpy as np
 import plotly.colors
 
+from utils.loaders.dataset import DataSfm
+
+
 def plot_networkx(data: torch_geometric.data.Data):
     graph = to_networkx(data, to_undirected=True)
     plt.figure(figsize=(5,5))
@@ -150,6 +153,104 @@ def plot_3D_graph(graph_a: torch_geometric.data.Data, graph_b: torch_geometric.d
     plot_3D_graph_subplots([(graph_a, graph_b)], [title])
 
 
+def plot_3D_graph_subplots_sfm(graph_pairs: list[tuple['DataSfm', 'DataSfm']], subplot_titles: list[str] = None):
+    """
+    Plots multiple 3D graphs in a row of subplots using DataSfm objects.
+
+    Args:
+        graph_pairs: A list of tuples, where each tuple contains two DataSfm graphs (graph_a, graph_b) to be plotted in a subplot.
+        subplot_titles: A list of titles for each subplot.
+    """
+    num_plots = len(graph_pairs)
+    if num_plots == 0:
+        return
+
+    if subplot_titles is None:
+        subplot_titles = [f'Graph Pair {i+1}' for i in range(num_plots)]
+
+    fig = make_subplots(
+        rows=1, cols=num_plots,
+        specs=[[{'type': 'scene'}] * num_plots],
+        subplot_titles=subplot_titles
+    )
+
+    for i, (graph_a, graph_b) in enumerate(graph_pairs):
+        # Extract camera centers from Rigid3d objects
+        team_a_camera_centers = np.array([rigid.translation for rigid in graph_a.rigid3d])
+        team_b_camera_centers = np.array([rigid.translation for rigid in graph_b.rigid3d])
+
+        traces = []
+        traces.append(go.Scatter3d(
+            x=team_a_camera_centers[:, 0],
+            y=team_a_camera_centers[:, 1],
+            z=team_a_camera_centers[:, 2],
+            mode='markers',
+            name='Set A Images',
+            marker=dict(size=5, color='red', symbol='diamond', opacity=1.0),
+            hovertemplate='%{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>',
+            legendgroup='groupA',
+            showlegend=(i==0)
+        ))
+        traces.append(go.Scatter3d(
+            x=team_b_camera_centers[:, 0],
+            y=team_b_camera_centers[:, 1],
+            z=team_b_camera_centers[:, 2],
+            mode='markers',
+            name='Set B Images',
+            marker=dict(size=5, color='blue', symbol='diamond', opacity=1.0),
+            hovertemplate='%{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>',
+            legendgroup='groupB',
+            showlegend=(i==0)
+        ))
+
+        # Edge traces
+        edge_trace_a = _edge_trace(team_a_camera_centers, getattr(graph_a, 'edge_index', None), 'Set A Edges', 'rgba(255,0,0,0.6)')
+        edge_trace_b = _edge_trace(team_b_camera_centers, getattr(graph_b, 'edge_index', None), 'Set B Edges', 'rgba(0,0,255,0.6)')
+        if edge_trace_a: traces.append(edge_trace_a)
+        if edge_trace_b: traces.append(edge_trace_b)
+
+        for trace in traces:
+            fig.add_trace(trace, row=1, col=i+1)
+
+        combined_xyz = np.vstack((team_a_camera_centers, team_b_camera_centers))
+        xyz_min = combined_xyz.min(axis=0)
+        xyz_max = combined_xyz.max(axis=0)
+        xyz_center = (xyz_min + xyz_max) * 0.5
+        xyz_half_range = (xyz_max - xyz_min) * 0.5
+        cube_radius = float(np.max(xyz_half_range)) or 1.0
+
+        x_range = [xyz_center[0] - cube_radius, xyz_center[0] + cube_radius]
+        y_range = [xyz_center[1] - cube_radius, xyz_center[1] + cube_radius]
+        z_range = [xyz_center[2] - cube_radius, xyz_center[2] + cube_radius]
+
+        scene_layout = dict(
+            xaxis=dict(title='X', range=x_range),
+            yaxis=dict(title='Y', range=y_range),
+            zaxis=dict(title='Z', range=z_range),
+            aspectmode='cube',
+        )
+        fig.update_scenes(scene_layout, row=1, col=i+1)
+
+    fig.update_layout(
+        title_text='3D Graph Visualization (SfM)',
+        width=500 * num_plots,
+        height=500
+    )
+    fig.show()
+
+
+def plot_3D_graph_sfm(graph_a: 'DataSfm', graph_b: 'DataSfm', title: str = ''):
+    """
+    Plots a single pair of DataSfm graphs in 3D.
+
+    Args:
+        graph_a: First DataSfm graph.
+        graph_b: Second DataSfm graph.
+        title: Title for the plot.
+    """
+    plot_3D_graph_subplots_sfm([(graph_a, graph_b)], [title])
+
+
 def plot_many_3D_graphs(graphs: list[torch_geometric.data.Data], titles: list[str] = None):
     """
     Plots multiple 3D graphs in a single plot, each with a different color.
@@ -215,3 +316,72 @@ def plot_many_3D_graphs(graphs: list[torch_geometric.data.Data], titles: list[st
         height=800
     )
     fig.show()
+
+
+def plot_many_3D_graphs_sfm(graphs: list['DataSfm'], titles: list[str] = None):
+    """
+    Plots multiple 3D graphs in a single plot using DataSfm objects, each with a different color.
+
+    Args:
+        graphs: A list of DataSfm graphs to be plotted.
+        titles: A list of titles for each graph.
+    """
+    num_graphs = len(graphs)
+    if num_graphs == 0:
+        return
+
+    fig = go.Figure()
+
+    colors = plotly.colors.qualitative.Plotly
+
+    all_xyz = []
+
+    for i, graph in enumerate(graphs):
+        # Extract camera centers from Rigid3d objects
+        camera_centers = np.array([rigid.translation for rigid in graph.rigid3d])
+        all_xyz.append(camera_centers)
+
+        color = colors[i % len(colors)]
+        title = titles[i] if titles and i < len(titles) else f'Graph {i+1}'
+
+        fig.add_trace(go.Scatter3d(
+            x=camera_centers[:, 0],
+            y=camera_centers[:, 1],
+            z=camera_centers[:, 2],
+            mode='markers',
+            name=title,
+            marker=dict(size=5, color=color, symbol='diamond', opacity=1.0),
+            hovertemplate='%{x:.2f}, %{y:.2f}, %{z:.2f}<extra></extra>',
+        ))
+
+        edge_trace = _edge_trace(camera_centers, getattr(graph, 'edge_index', None), title, color)
+        if edge_trace:
+            fig.add_trace(edge_trace)
+
+    if not all_xyz:
+        return
+
+    combined_xyz = np.vstack(all_xyz)
+    xyz_min = combined_xyz.min(axis=0)
+    xyz_max = combined_xyz.max(axis=0)
+    xyz_center = (xyz_min + xyz_max) * 0.5
+    xyz_half_range = (xyz_max - xyz_min) * 0.5
+    cube_radius = float(np.max(xyz_half_range)) or 1.0
+
+    x_range = [xyz_center[0] - cube_radius, xyz_center[0] + cube_radius]
+    y_range = [xyz_center[1] - cube_radius, xyz_center[1] + cube_radius]
+    z_range = [xyz_center[2] - cube_radius, xyz_center[2] + cube_radius]
+
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(title='X', range=x_range),
+            yaxis=dict(title='Y', range=y_range),
+            zaxis=dict(title='Z', range=z_range),
+            aspectmode='cube',
+        ),
+        title='3D Graph Visualization (SfM)',
+        width=800,
+        height=800
+    )
+    fig.show()
+
