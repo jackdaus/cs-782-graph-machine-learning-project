@@ -6,6 +6,8 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 import numpy as np
 import plotly.colors
+import torch
+import pycolmap
 
 from utils.loaders.dataset import DataSfm
 
@@ -318,13 +320,14 @@ def plot_many_3D_graphs(graphs: list[torch_geometric.data.Data], titles: list[st
     fig.show()
 
 
-def plot_many_3D_graphs_sfm(graphs: list['DataSfm'], titles: list[str] = None):
+def plot_many_3D_graphs_sfm(graphs: list['DataSfm'], titles: list[str] = None, colors: list[str] = None):
     """
     Plots multiple 3D graphs in a single plot using DataSfm objects, each with a different color.
 
     Args:
         graphs: A list of DataSfm graphs to be plotted.
         titles: A list of titles for each graph.
+        colors: A list of color strings for each graph. If None, uses default Plotly colors.
     """
     num_graphs = len(graphs)
     if num_graphs == 0:
@@ -332,7 +335,8 @@ def plot_many_3D_graphs_sfm(graphs: list['DataSfm'], titles: list[str] = None):
 
     fig = go.Figure()
 
-    colors = plotly.colors.qualitative.Plotly
+    if colors is None:
+        colors = plotly.colors.qualitative.Plotly
 
     all_xyz = []
 
@@ -384,4 +388,95 @@ def plot_many_3D_graphs_sfm(graphs: list['DataSfm'], titles: list[str] = None):
         height=800
     )
     fig.show()
+
+
+def visualize_sfm_prediction(model, sample):
+    """
+    Visualizes the prediction of a rotation/translation model on an SfM graph pair.
+
+    This function:
+    1. Runs the model on a graph pair to predict transformation
+    2. Applies the inverse predicted transformation to restore graph_b
+    3. Applies the inverse true transformation to show ground truth
+    4. Plots all four graphs in order:
+       - Graph A (true) - dark green
+       - Graph B (true) - light green
+       - Graph B (input/perturbed) - red
+       - Graph B (prediction) - blue
+
+    Note: This function always uses CPU for inference since visualization requires
+    converting tensors to numpy arrays.
+
+    Args:
+        model: The trained model that predicts (translation, rotation) from graph pairs
+        sample: A tuple containing (graph_a, graph_b, label_translation, label_rotation)
+
+    Returns:
+        A tuple of (predicted_graph_b, true_graph_b, graph_a_example, graph_b_example)
+    """
+    # Move model to CPU and set to eval mode (required for visualization)
+    model.to('cpu')
+    model.eval()
+
+    # Extract sample components and move to CPU
+    graph_a_example = sample[0].to('cpu')
+    graph_b_example = sample[1].to('cpu')
+    label_trans_example = sample[2].to('cpu')
+    label_rot_example = sample[3].to('cpu')
+
+    # Make prediction
+    with torch.no_grad():
+        pred = model(graph_a_example, graph_b_example)
+
+    pred_trans = pred[0]
+    pred_rot = pred[1]
+
+    # Important! We must normalize the predicted quaternion... since the prediction might not be normalized
+    pred_rot = pred_rot / pred_rot.norm()
+
+    # Create transformation from prediction
+    graph_transformation_pred = pycolmap.Rigid3d(
+        pred_rot.cpu().numpy().flatten(),
+        pred_trans.cpu().numpy().flatten()
+    )
+
+    # Compute the inverse, since this is what we will need to "restore" the pose of the graph
+    graph_transformation_pred_inv = graph_transformation_pred.inverse()
+
+    # Create copy for the predicted graph
+    predicted_graph_b = graph_b_example.clone()
+    # Apply restoring predicted transform
+    predicted_graph_b.rigid3d = [graph_transformation_pred_inv * rigid for rigid in predicted_graph_b.rigid3d]
+    # Update graph attributes
+    predicted_graph_b_pos = np.stack([rigid.translation for rigid in predicted_graph_b.rigid3d], axis=0)
+    predicted_graph_b_pos = torch.from_numpy(predicted_graph_b_pos).float()
+    predicted_graph_b_rot = np.stack([rigid.rotation.quat for rigid in predicted_graph_b.rigid3d], axis=0)
+    predicted_graph_b_rot = torch.from_numpy(predicted_graph_b_rot).float()
+    predicted_graph_b.x = torch.hstack([
+        predicted_graph_b_pos,
+        predicted_graph_b_rot,
+        # predicted_graph_b.image_features.to('cpu')
+    ])
+
+    # Create transformation for true label
+    graph_transformation_true = pycolmap.Rigid3d(
+        label_rot_example.cpu().numpy().flatten(),
+        label_trans_example.cpu().numpy().flatten()
+    )
+
+    graph_transformation_true_inv = graph_transformation_true.inverse()
+    # Create copy, and then apply the transform to recover the true labels
+    true_graph_b = graph_b_example.clone()
+    true_graph_b.rigid3d = [graph_transformation_true_inv * rigid for rigid in true_graph_b.rigid3d]
+
+    # Visualize all four graphs in the desired order with custom colors
+    # Order: Graph A (true), Graph B (true), Graph B (input), Graph B (prediction)
+    # Colors: Dark Green, Light Green, Red, Blue
+    plot_many_3D_graphs_sfm(
+        [graph_a_example, true_graph_b, graph_b_example, predicted_graph_b],
+        ["Graph A (true)", "Graph B (true)", "Graph B (input)", "Graph B (prediction)"],
+        colors=['black', 'limegreen', 'red', 'dodgerblue']
+    )
+
+    return predicted_graph_b, true_graph_b, graph_a_example, graph_b_example
 

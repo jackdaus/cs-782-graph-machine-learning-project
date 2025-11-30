@@ -12,7 +12,21 @@ from torchvision import transforms
 from utils.loaders.dataset import DataSfm
 
 
-def load_reconstruction_to_graph_sfm(reconstruction: Reconstruction, image_dir: pathlib.Path, filtered_image_ids: list[int] = None) -> DataSfm:
+def load_reconstruction_to_graph_sfm(reconstruction: Reconstruction, image_dir: pathlib.Path,
+                                     filtered_image_ids: list[int] = None, img_size: int = 3,
+                                     include_image_features: bool = True) -> DataSfm:
+    """Convert a COLMAP reconstruction to a PyTorch Geometric graph with SfM data.
+
+    Args:
+        reconstruction: COLMAP reconstruction containing images and camera poses
+        image_dir: Directory containing the image files
+        filtered_image_ids: Subset of image IDs to include (None = all images)
+        img_size: Resize dimension for images (default: 3x3), for image feature vector
+        include_image_features: Whether to include image feature vectors (default: True)
+
+    Returns:
+        DataSfm: Graph with node features (positions, rotations, optionally image features) and edges based on covisibility
+    """
     # Get all the image_ids from this Reconstruction
     all_image_ids = list(reconstruction.images.keys())
 
@@ -37,19 +51,22 @@ def load_reconstruction_to_graph_sfm(reconstruction: Reconstruction, image_dir: 
     image_paths = []
     image_files = []
     image_tensors = []
-    transform = transforms.ToTensor()
-    for image_id in filtered_image_ids:
-        image = reconstruction.images[image_id]
-        image_path = image_dir / image.name
-        img = Image.open(image_path).convert("RGB")
-        img = img.resize((3,3), resample=Image.LANCZOS) # Resize to 3x3 for now as a quick experiment
-        image_paths.append(image_path)
-        image_files.append(img)
-        image_tensors.append(transform(img))
+    image_features = None
 
-    # # Stack and flatten image tensors
-    image_features = torch.stack(image_tensors)
-    image_features = image_features.view(image_features.size(0), -1)  # Flatten to (num_nodes, num_features)
+    if include_image_features:
+        transform = transforms.ToTensor()
+        for image_id in filtered_image_ids:
+            image = reconstruction.images[image_id]
+            image_path = image_dir / image.name
+            img = Image.open(image_path).convert("RGB")
+            img = img.resize((img_size, img_size), resample=Image.LANCZOS) # Resize to 3x3 for now as a quick experiment
+            image_paths.append(image_path)
+            image_files.append(img)
+            image_tensors.append(transform(img))
+
+        # Stack and flatten image tensors
+        image_features = torch.stack(image_tensors)
+        image_features = image_features.view(image_features.size(0), -1)  # Flatten to (num_nodes, num_features)
 
     # Create a map between the image_id and index in the list
     image_id_to_idx = {image_id: idx for idx, image_id in enumerate(filtered_image_ids)}
@@ -68,12 +85,18 @@ def load_reconstruction_to_graph_sfm(reconstruction: Reconstruction, image_dir: 
     # Create the edge index matrix. PyG expects a matrix of shape (2, E)
     edge_index = torch.tensor([src, dst], dtype=torch.long)
 
+    # Build node features: concatenate position, rotation, and optionally image features
+    if include_image_features:
+        node_features = torch.cat([image_centers_tensor, quats_xyzw_tensor, image_features], dim=1)
+    else:
+        node_features = torch.cat([image_centers_tensor, quats_xyzw_tensor], dim=1)
+
     data_sfm = DataSfm(
         # for the node features, we concatenate:
         # 1. image centers (3 dims)
         # 2. quaternions (4 dims)
-        # 3. image features (27 dims for 3x3 RGB images)
-        x=torch.cat([image_centers_tensor, quats_xyzw_tensor, image_features], dim=1),
+        # 3. image features (optional, e.g., 27 dims for 3x3 RGB images)
+        x=node_features,
         edge_index=edge_index)
     # SfM-specific attributes
     data_sfm.rigid3d = world_from_cams
