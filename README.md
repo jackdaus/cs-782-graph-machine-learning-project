@@ -13,6 +13,27 @@ To run the experimental setup,
 uv run .\01_basic_pipeline.py
 ```
 
+## Generating Training Data
+
+The notebooks use pre-generated training data. To regenerate the data with different parameters:
+
+```bash
+uv run python generate_data.py
+```
+
+This script:
+1. Loads a COLMAP reconstruction
+2. Creates random subsets of images
+3. Applies random rotations and translations to create synthetic training pairs
+4. Saves the data to `data/data.pt`
+
+You can modify the parameters in `generate_data.py` to change:
+- Number of samples
+- Subset size
+- Translation range
+- Random seed
+- Whether to include image features
+
 ## Saving PyG datasets
 
 `GraphPairDataset` instances can be serialized once and reloaded without rebuilding:

@@ -5,3 +5,4 @@ training:
   batch_size: 32
   lr: 0.001
   lambda_translation: 0.1 # Weight for translation loss vs rotation loss
+  lambda_frobenius: 0.1 # Weight for Frobenius norm regularization
