@@ -1,0 +1,6 @@
+model:
+  embedding_size: 128
+training:
+  num_epochs: 100
+  batch_size: 32
+  lr: 0.001
