@@ -86,8 +86,8 @@ class SiameseGCN_v2(nn.Module):
     def __init__(self, num_node_features: int, graph_embedding_dim: int = 4):
         super().__init__()
         # Create twin branches that process each graph in tandem
-        self.sisterA = GraphEmbeddingGCN_v2(num_node_features, output_dim = graph_embedding_dim)
-        self.sisterB = GraphEmbeddingGCN_v2(num_node_features, output_dim = graph_embedding_dim)
+        self.sisterA = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
+        self.sisterB = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
 
         # This next part will take as input the embeddings from the sister network
         self.mlp_translation = nn.Sequential(
@@ -128,8 +128,8 @@ class SiameseGCN_v3(nn.Module):
     def __init__(self, num_node_features: int, graph_embedding_dim: int = 4):
         super().__init__()
         # Create twin branches that process each graph in tandem
-        self.sisterA = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
-        self.sisterB = GraphEmbeddingGCN_v1(num_node_features, output_dim = graph_embedding_dim)
+        self.sisterA = GraphEmbeddingGCN_v2(num_node_features, output_dim = graph_embedding_dim)
+        self.sisterB = GraphEmbeddingGCN_v2(num_node_features, output_dim = graph_embedding_dim)
 
         # This next part will take as input the embeddings from the sister network
         self.mlp_translation = nn.Sequential(

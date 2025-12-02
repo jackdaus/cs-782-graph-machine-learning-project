@@ -4,3 +4,4 @@ training:
   num_epochs: 100
   batch_size: 32
   lr: 0.001
+  lambda_translation: 0.1 # Weight for translation loss vs rotation loss

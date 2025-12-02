@@ -1,3 +1,4 @@
+import roma
 from matplotlib import pyplot as plt
 import networkx as nx
 from torch_geometric.utils import to_networkx
@@ -431,14 +432,31 @@ def visualize_sfm_prediction(model, sample):
     pred_trans = pred[0]
     pred_rot = pred[1]
 
-    # Important! We must normalize the predicted quaternion... since the prediction might not be normalized
-    pred_rot = pred_rot / pred_rot.norm()
+    # Handle both rotation matrix (9D) and quaternion (4D) outputs
+    pred_rot_np = pred_rot.cpu().numpy().flatten()
 
-    # Create transformation from prediction
-    graph_transformation_pred = pycolmap.Rigid3d(
-        pred_rot.cpu().numpy().flatten(),
-        pred_trans.cpu().numpy().flatten()
-    )
+    if pred_rot_np.shape[0] == 9:
+        # Rotation matrix from RoMa library (9D vector)
+        # Reshape to 3x3 matrix
+        rot_mat_raw = pred_rot.view(3, 3)
+        # Ensure it's a valid rotation matrix using Procrustes
+        rot_mat = roma.special_procrustes(rot_mat_raw)
+        # Create transformation from rotation matrix
+        graph_transformation_pred = pycolmap.Rigid3d(
+            rot_mat.cpu().numpy(),
+            pred_trans.cpu().numpy().flatten()
+        )
+    elif pred_rot_np.shape[0] == 4:
+        # Quaternion (4D vector)
+        # Important! We must normalize the predicted quaternion... since the prediction might not be normalized
+        pred_rot_normalized = pred_rot / pred_rot.norm()
+        # Create transformation from quaternion
+        graph_transformation_pred = pycolmap.Rigid3d(
+            pred_rot_normalized.cpu().numpy().flatten(),
+            pred_trans.cpu().numpy().flatten()
+        )
+    else:
+        raise ValueError(f"Unexpected rotation prediction size: {pred_rot_np.shape[0]}. Expected 4 (quaternion) or 9 (rotation matrix).")
 
     # Compute the inverse, since this is what we will need to "restore" the pose of the graph
     graph_transformation_pred_inv = graph_transformation_pred.inverse()
