@@ -17,7 +17,7 @@ output_path.mkdir(exist_ok=True)
 database_path = output_path / "database.db"
 
 # Define path to input images
-image_dir = pathlib.Path("./data/01_lego_small")
+image_dir = pathlib.Path("./data/01_nerf/01_lego_small")
 
 # Log all images to Rerun
 exts = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}

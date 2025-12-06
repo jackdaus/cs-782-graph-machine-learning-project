@@ -75,8 +75,8 @@ def generate_sfm_data(
         )
 
         # Generate random translation
-        # random_translation = torch.empty(3).uniform_(*translation_range)
-        random_translation = torch.tensor([0, 0, 0]).float()  # Zero translation for now
+        random_translation = torch.empty(3).uniform_(*translation_range)
+        # random_translation = torch.tensor([0, 0, 0]).float()  # Zero translation for now
 
         # Generate random rotation
         random_rotation = Rotation.random().as_quat()
@@ -150,10 +150,10 @@ if __name__ == '__main__':
         image_dir=image_dir,
         num_samples=1000,
         subset_size=15,
-        include_image_features=False,
-        translation_range=(-10.0, 10.0),
+        include_image_features=True,
+        translation_range=(-1.0, 1.0),
         random_seed=42,
-        output_path=pathlib.Path('data/data-2.pt')
+        output_path=pathlib.Path('data/data-4.pt')
     )
 
     print("\nData generation complete!")
