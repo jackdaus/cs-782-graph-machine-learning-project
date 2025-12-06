@@ -26,6 +26,7 @@ def generate_sfm_data(
     num_samples=10,
     subset_size=15,
     include_image_features=False,
+    img_size=3,
     translation_range=(-10.0, 10.0),
     random_seed=42,
     output_path=None
@@ -39,6 +40,7 @@ def generate_sfm_data(
         num_samples: Number of data samples to generate
         subset_size: Size of each image subset
         include_image_features: Whether to include image features in node features
+        img_size: Resize dimension for images (default: 3x3)
         translation_range: Range for random translations (min, max)
         random_seed: Random seed for reproducibility
         output_path: Path to save the generated data (default: data/data.pt)
@@ -59,8 +61,12 @@ def generate_sfm_data(
     labels_translations = []
     labels_quat_xyzw = []
 
+    # Track estimated size (tensor elements * 4 bytes for float32)
+    total_elements = 0
+
     # Generate data samples
-    for i in tqdm(range(num_samples), desc="Generating data"):
+    pbar = tqdm(range(num_samples), desc="Generating data")
+    for i in pbar:
         # Create random subsets using distance-based heuristic
         a_ids, b_ids = utils.subset.create_image_subsets_from_distance(
             reconstruction, subset_size, random_captains=True
@@ -68,10 +74,10 @@ def generate_sfm_data(
 
         # Create PyG graph Dataset for each subset
         graph_a = utils.loaders.load_reconstruction_to_graph_sfm(
-            reconstruction, image_dir, a_ids, include_image_features=include_image_features
+            reconstruction, image_dir, a_ids, img_size=img_size, include_image_features=include_image_features
         )
         graph_b = utils.loaders.load_reconstruction_to_graph_sfm(
-            reconstruction, image_dir, b_ids, include_image_features=include_image_features
+            reconstruction, image_dir, b_ids, img_size=img_size, include_image_features=include_image_features
         )
 
         # Generate random translation
@@ -107,6 +113,17 @@ def generate_sfm_data(
         random_rotation_tensor = torch.from_numpy(np.stack(random_rotation)).float()
         labels_quat_xyzw.append(random_rotation_tensor)
 
+        # Update estimated size (count tensor elements)
+        for g in [graph_a, graph_b]:
+            total_elements += g.x.numel() + g.edge_index.numel()
+            if g.image_features is not None:
+                total_elements += g.image_features.numel()
+        total_elements += random_translation.numel() + random_rotation_tensor.numel()
+
+        # Update progress bar with estimated size
+        size_mb = (total_elements * 4) / (1024 * 1024)  # float32 = 4 bytes
+        pbar.set_postfix({'est_size': f'{size_mb:.1f}MB'})
+
     # Prepare data dictionary
     data = {
         'graph_a_list': graph_a_list,
@@ -117,6 +134,7 @@ def generate_sfm_data(
             'num_samples': num_samples,
             'subset_size': subset_size,
             'include_image_features': include_image_features,
+            'img_size': img_size,
             'translation_range': translation_range,
             'random_seed': random_seed,
             'model_path': str(model_path),
@@ -148,12 +166,13 @@ if __name__ == '__main__':
     data = generate_sfm_data(
         model_path=model_path,
         image_dir=image_dir,
-        num_samples=1000,
+        num_samples=50,
         subset_size=15,
         include_image_features=True,
-        translation_range=(-1.0, 1.0),
+        img_size=100,
+        translation_range=(-10.0, 10.0),
         random_seed=42,
-        output_path=pathlib.Path('data/data-4.pt')
+        output_path=pathlib.Path('data/data-5.pt')
     )
 
     print("\nData generation complete!")

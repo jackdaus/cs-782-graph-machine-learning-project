@@ -24,6 +24,7 @@ class DataSfm(Data):
         self.image_paths: Optional[List[str]] = None  # List of length num_nodes
         self.image_files: Optional[List] = None  # List of length num_nodes
 
+
 class SfmPairDataset(Dataset):
     g_list_1: List[DataSfm]
     g_list_2: List[DataSfm]
@@ -52,6 +53,8 @@ class SfmPairDataset(Dataset):
         label_quat_xyzw = self.labels_quat_xyzw[idx]
         return data_1, data_2, label_trans, label_quat_xyzw
 
+
+# DEPRECATED, use SfmPairDataset instead
 class GraphPairDataset(Dataset):
     g_list_1: List[Data]  # Declare the attribute with its type
     g_list_2: List[Data]
