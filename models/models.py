@@ -216,3 +216,52 @@ class SiameseGCN_v4(nn.Module):
         # Return both outputs as a tuple
         h = (h_translation, rot_mat_raw)
         return h
+
+
+
+class SiameseGCN_v5(nn.Module):
+    """
+    A Siamese GCN model that predicts a translation (x, y, z) and rotation (3x3 mat) between two graphs.
+    This version does not normalize the rotation matrix output.
+    """
+    def __init__(self, num_node_features: int, graph_embedding_dim: int = 4):
+        super().__init__()
+        # Use only one sister network for both inputs (weight sharing)
+        self.sfm_encoder = GraphEmbeddingGCN_v2(num_node_features, output_dim = graph_embedding_dim)
+
+        # This next part will take as input the embeddings from the sister network
+        self.mlp_translation = nn.Sequential(
+            nn.Linear(graph_embedding_dim * 2, 8),
+            nn.ReLU(),
+            nn.Linear(8, 8),
+            nn.ReLU(),
+            # Output 3 scalars for (x, y, z) translation prediction
+            nn.Linear(8, 3)
+        )
+        self.mlp_rotation = nn.Sequential(
+            nn.Linear(graph_embedding_dim * 2, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            # Output 9 scalars for a (3x3) rotation matrix prediction
+            nn.Linear(32, 9)
+        )
+
+    def forward(self, graph_data_1: torch_geometric.data.Data, graph_data_2: torch_geometric.data.Data) -> tuple[torch.Tensor, torch.Tensor]:
+        # Project graph1 and graph2 into the "embedding space" (idk if this is properly called an embedding space...)
+        e1 = self.sfm_encoder(graph_data_1)
+        e2 = self.sfm_encoder(graph_data_2)
+
+        # Concatenate the features
+        h = torch.cat((e1, e2), dim=1)
+        # Run through an MLP to predict translation
+        h_translation = self.mlp_translation(h)
+        # Run through an MLP to predict rotation matrix (as a flattened 9-vector)
+        rot_9vec = self.mlp_rotation(h)
+        # We need to reshape this to (batch_size, 3, 3)
+        rot_mat_raw = rot_9vec.view(-1, 3, 3)
+        # We need to ensure this matrix is valid rotation matrix (orthogonal and det = 1)
+        # rot_mat = roma.special_procrustes(rot_mat_raw)
+        # Return both outputs as a tuple
+        h = (h_translation, rot_mat_raw)
+        return h
