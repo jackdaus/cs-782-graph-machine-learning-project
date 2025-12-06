@@ -1,1 +1,1 @@
-from .models import SiameseGCN_v1, SiameseGCN_v2, SiameseGCN_v3, SiameseGCN_v4, SiameseGCN_v5
+from .models import SiameseGCN_v1, SiameseGCN_v2, SiameseGCN_v3, SiameseGCN_v4, SiameseGCN_v5, SiameseGCN_v6
