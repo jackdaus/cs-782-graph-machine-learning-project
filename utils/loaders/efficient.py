@@ -225,6 +225,31 @@ class EfficientSfmPairDataset(Dataset):
 
         return graph_a, graph_b, sample.label_translation, sample.label_quat_xyzw
 
+    def get_as_data_sfm(self, idx: int) -> Tuple[DataSfm, DataSfm, torch.Tensor, torch.Tensor]:
+        """
+        Get a sample as DataSfm objects for visualization.
+
+        This is useful when you want to use visualization functions like
+        `visualize_sfm_prediction` which expect DataSfm objects with rigid3d attributes.
+
+        Args:
+            idx: Sample index
+
+        Returns:
+            Tuple of (graph_a, graph_b, label_translation, label_quat_xyzw) with DataSfm objects
+        """
+        sample = self.samples[idx]
+        graph_a, graph_b = sfm_sample_to_data_sfm(sample)
+
+        # Add image features to x if enabled
+        if self.include_image_features:
+            img_feats_a = torch.stack([self.image_features[id] for id in sample.image_ids_a])
+            img_feats_b = torch.stack([self.image_features[id] for id in sample.image_ids_b])
+            graph_a.x = torch.cat([graph_a.x, img_feats_a], dim=1)
+            graph_b.x = torch.cat([graph_b.x, img_feats_b], dim=1)
+
+        return graph_a, graph_b, sample.label_translation, sample.label_quat_xyzw
+
     def _build_graph(
         self,
         image_ids: List[int],
@@ -353,4 +378,5 @@ def compute_edge_index(
                 dst.append(image_id_to_idx[dst_id])
 
     return torch.tensor([src, dst], dtype=torch.long)
+
 

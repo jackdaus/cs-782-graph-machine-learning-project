@@ -41,6 +41,7 @@ def generate_sfm_data_efficient(
     include_image_features: bool = True,
     img_size: int = 100,
     translation_range: Tuple[float, float] = (-10.0, 10.0),
+    enable_rotation_perturbation: bool = True,
     random_seed: int = 42,
     output_dir: pathlib.Path = None,
 ) -> EfficientSfmPairDataset:
@@ -55,6 +56,7 @@ def generate_sfm_data_efficient(
         include_image_features: Whether to include image features in node features
         img_size: Resize dimension for images
         translation_range: Range for random translations (min, max)
+        enable_rotation_perturbation: Whether to apply random rotation to poses_b
         random_seed: Random seed for reproducibility
         output_dir: Directory to save the generated data
 
@@ -116,7 +118,10 @@ def generate_sfm_data_efficient(
 
         # Generate random transformation
         random_translation = torch.empty(3).uniform_(*translation_range)
-        random_rotation = Rotation.random().as_quat()  # xyzw format
+        if enable_rotation_perturbation:
+            random_rotation = Rotation.random().as_quat()  # xyzw format
+        else:
+            random_rotation = np.array([0.0, 0.0, 0.0, 1.0])  # Identity quaternion (xyzw)
         random_transform = pycolmap.Rigid3d(random_rotation, random_translation.numpy())
 
         # Apply transformation to poses_b
@@ -149,6 +154,7 @@ def generate_sfm_data_efficient(
         'include_image_features': include_image_features,
         'img_size': img_size,
         'translation_range': translation_range,
+        'enable_rotation_perturbation': enable_rotation_perturbation,
         'random_seed': random_seed,
         'model_path': str(model_path),
         'image_dir': str(image_dir),
@@ -173,6 +179,7 @@ def generate_sfm_data_efficient(
     print(f"Subset size: {subset_size}")
     print(f"Include image features: {include_image_features}")
     print(f"Image size: {img_size}x{img_size}")
+    print(f"Rotation perturbation: {enable_rotation_perturbation}")
 
     # Compare to old approach
     old_approach_mb = num_samples * 2 * subset_size * sample_feature.numel() * 4 / (1024 * 1024)
@@ -214,11 +221,12 @@ if __name__ == '__main__':
     dataset = generate_sfm_data_efficient(
         model_path=model_path,
         image_dir=image_dir,
-        num_samples=1000,  # Can generate many more samples now!
+        num_samples=1000,
         subset_size=15,
         include_image_features=True,
         img_size=100,
         translation_range=(-10.0, 10.0),
+        enable_rotation_perturbation=False,
         random_seed=42,
         output_dir=output_dir,
     )

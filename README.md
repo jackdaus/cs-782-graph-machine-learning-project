@@ -1,5 +1,27 @@
 # About
 
+todo
+
+## Generating Data
+
+
+1. download the colmap nerf lego dataset from....
+2. put in folder... 
+
+To generate datasets, run:
+
+```bash
+uv run generate_data_efficient.py
+```
+
+
+
+--- 
+
+# OLD
+
+--- 
+
 This repo explores usage of [pycolmap](https://colmap.github.io/pycolmap/index.html). 
 
 - Here is a [basic usage example](https://github.com/colmap/colmap/blob/f8edccaa36909713b9d3930e1ca65cb364a38b26/python/examples/example.py) from the colmap authors.
