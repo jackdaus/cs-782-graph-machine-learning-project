@@ -4,17 +4,37 @@ todo
 
 ## Generating Data
 
-
-1. download the colmap nerf lego dataset from....
-2. put in folder... 
-
-To generate datasets, run:
+Generate training data from a COLMAP reconstruction:
 
 ```bash
-uv run generate_data_efficient.py
+# Default config
+uv run python generate_data.py
+
+# Override parameters
+uv run python generate_data.py generation.num_samples=500 features.img_size=64
+
+# Use preset configs
+uv run python generate_data.py --config-name data_generation_small  # Quick testing
+uv run python generate_data.py --config-name data_generation_large  # Full dataset
 ```
 
+Configuration is in `conf/data_generation.yaml`. Key parameters:
+- `paths.model` - COLMAP reconstruction directory
+- `paths.images` - Source images directory  
+- `paths.output` - Output directory (default: `data/generated`)
+- `generation.num_samples` - Number of training samples
+- `generation.subset_size` - Images per graph
+- `features.img_size` - Image resize dimension
 
+Output files:
+- `image_features.pt` - Shared image feature cache
+- `samples.pt` - Training samples
+
+
+TO generate the samples for experiment 1:
+```bash
+uv run python generate_data.py --config-name data_generation_v1_translation_only
+```
 
 --- 
 
@@ -40,7 +60,7 @@ uv run .\01_basic_pipeline.py
 The notebooks use pre-generated training data. To regenerate the data with different parameters:
 
 ```bash
-uv run python generate_data.py
+uv run python generate_data_legacy.py
 ```
 
 This script:

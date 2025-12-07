@@ -11,7 +11,7 @@ dataset-1.pt
 
 This dataset has smaller translation ranges and includes image features.
 
-The dataset was created with the following modifications to `generate_data.py`:
+The dataset was created with the following modifications to `generate_data_legacy.py`:
 ```python
     data = generate_sfm_data(
         model_path=model_path,
@@ -27,14 +27,14 @@ The dataset was created with the following modifications to `generate_data.py`:
 
 then run
 ```bash
-uv run generate_data.py
+uv run generate_data_legacy.py
 ```
 
 ## dataset-5.pt
 
 This dataset has smaller translation ranges and includes image features.
 
-The dataset was created with the following modifications to `generate_data.py`:
+The dataset was created with the following modifications to `generate_data_legacy.py`:
 ```python
     data = generate_sfm_data(
         model_path=model_path,
@@ -51,6 +51,6 @@ The dataset was created with the following modifications to `generate_data.py`:
 
 then run
 ```bash
-uv run generate_data.py
+uv run generate_data_legacy.py
 ```
 

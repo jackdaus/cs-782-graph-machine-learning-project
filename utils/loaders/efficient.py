@@ -82,6 +82,15 @@ class ImageFeatureCache:
             self.get_features(image_id)
         return self
 
+    def get_all_features(self) -> Dict[int, torch.Tensor]:
+        """
+        Get all cached features.
+
+        Returns:
+            Dict mapping image_id to feature tensor
+        """
+        return self._cache
+
     def save(self, path: pathlib.Path) -> None:
         """
         Save cached features to disk.
@@ -333,7 +342,13 @@ class EfficientSfmPairDataset(Dataset):
             Loaded EfficientSfmPairDataset with metadata attribute
         """
         data = torch.load(samples_path, weights_only=False)
-        features, img_size = ImageFeatureCache.load(features_path)
+
+        # Only load features if needed
+        if include_image_features:
+            features, img_size = ImageFeatureCache.load(features_path)
+        else:
+            features = {}
+            img_size = None
 
         samples = []
         for s in data['samples']:
@@ -350,7 +365,8 @@ class EfficientSfmPairDataset(Dataset):
 
         dataset = cls(samples, features, include_image_features)
         dataset.metadata = data.get('metadata', {})
-        dataset.metadata['img_size'] = img_size
+        if img_size is not None:
+            dataset.metadata['img_size'] = img_size
         return dataset
 
 
