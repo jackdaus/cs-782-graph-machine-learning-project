@@ -1,12 +1,13 @@
 model:
-  embedding_size: 128
+  embedding_size: 16
+
 training:
   num_epochs: 1000
-  batch_size: 32
+  batch_size: 64
   lr: 0.001
-  lambda_translation: 0.1 # Weight for translation loss vs rotation loss
-  lambda_frobenius: 0.1 # Weight for Frobenius norm regularization
+  lambda_translation: 1.0
+  lambda_frobenius: 0.01
   scheduler:
     enabled: true
-    step_size: 100
+    step_size: 200
     gamma: 0.8

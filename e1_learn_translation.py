@@ -25,6 +25,7 @@ from tqdm import tqdm
 
 from generate_data import load_dataset
 from models.models import SiameseGAT_v7
+from utils.eval import evaluate
 
 
 def log(msg: str = ""):
@@ -202,9 +203,42 @@ def main(cfg: DictConfig):
                 writer.add_scalar('loss_translation/val', avg_val_loss_translation, epoch)
                 writer.add_scalar('translation_error/val', avg_val_translation_error, epoch)
 
-    writer.close()
     log(f"\nTraining complete. Final train loss: {epoch_losses_train[-1]:.4f}")
     log(f"TensorBoard logs saved to: runs/e1_learn_translation/{timestamp_str}")
+
+    # Save model checkpoint
+    checkpoint_path = pathlib.Path(f"runs/e1_learn_translation/{timestamp_str}/model.pt")
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'config': OmegaConf.to_container(cfg),
+        'num_node_features': num_node_features,
+        'final_train_loss': epoch_losses_train[-1],
+    }, checkpoint_path)
+    log(f"Model checkpoint saved to: {checkpoint_path}")
+
+    # Evaluate on test set
+    log("\n" + "=" * 50)
+    log("Evaluating on held-out TEST set...")
+    log("=" * 50)
+
+    test_loader = DataLoader(test_dataset, cfg.training.batch_size, shuffle=False)
+    test_results = evaluate(model, test_loader)
+
+    log(f"\nTest Results:")
+    log(f"  - Translation MSE Loss: {test_results['mse_loss']:.6f}")
+    log(f"  - Translation L2 Error: {test_results['l2_error']:.6f}")
+    log(f"  - Num samples: {test_results['num_samples']}")
+
+    # Log test metrics to TensorBoard
+    writer.add_scalar('loss_translation/test', test_results['mse_loss'], cfg.training.num_epochs)
+    writer.add_scalar('translation_error/test', test_results['l2_error'], cfg.training.num_epochs)
+    writer.close()
+
+    return test_results
+
+
 
 
 if __name__ == "__main__":
