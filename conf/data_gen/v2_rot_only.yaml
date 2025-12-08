@@ -1,0 +1,11 @@
+defaults:
+  - base
+
+paths:
+  output: data/samples_v2_rot_only
+
+transform:
+  translation_min: 0
+  translation_max: 0
+  enable_rotation_perturbation: true
+

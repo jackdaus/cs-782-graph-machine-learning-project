@@ -1,0 +1,10 @@
+defaults:
+  - base
+
+paths:
+  output: data/samples_v1_trans_only
+
+transform:
+  translation_min: -3
+  translation_max: 3
+  enable_rotation_perturbation: false

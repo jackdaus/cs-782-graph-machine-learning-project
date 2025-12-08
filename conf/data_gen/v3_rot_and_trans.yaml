@@ -1,0 +1,11 @@
+defaults:
+  - base
+
+paths:
+  output: data/samples_v3_rot_and_trans
+
+transform:
+  translation_min: -3.0
+  translation_max: 3.0
+  enable_rotation_perturbation: true
+

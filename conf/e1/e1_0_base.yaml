@@ -1,5 +1,10 @@
 model:
+#  name: SiameseGCN_v6 # TODO update the script to support this usage...
   embedding_size: 16
+
+dataset:
+  name: samples_v1_trans_only
+  include_image_features: false
 
 training:
   num_epochs: 1000

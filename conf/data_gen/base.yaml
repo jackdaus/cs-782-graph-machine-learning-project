@@ -8,12 +8,12 @@ paths:
   # Path to source images directory
   images: data/01_nerf/02_lego_large
   # Output directory for generated data
-  output: data/generated-v2
+  output: data/samples_v1_trans_only
 
 # Data generation parameters
 generation:
   # Number of data samples to generate
-  num_samples: 100
+  num_samples: 1000
   # Size of each image subset (nodes per graph)
   subset_size: 15
   # Random seed for reproducibility
@@ -22,15 +22,14 @@ generation:
 # Image feature parameters
 features:
   # Whether to include image features in node features
-  include_image_features: true
-  # Resize dimension for images (img_size x img_size)
-  img_size: 10
+  include_image_features: false
+  # img_size not required when include_image_features is false
 
 # Transformation parameters for pose augmentation
 transform:
   # Range for random translations [min, max]
-  translation_min: -10.0
-  translation_max: 10.0
+  translation_min: -3
+  translation_max: 3
   # Whether to apply random rotation perturbation to poses_b
-  enable_rotation_perturbation: true
+  enable_rotation_perturbation: false
 

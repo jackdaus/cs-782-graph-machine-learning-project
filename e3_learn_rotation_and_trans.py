@@ -1,7 +1,7 @@
 """
 e3_learn_rotation_and_trans.py
 
-Experiment 2: Learn to predict 3D rotation between two graphs using a Siamese GNN.
+Experiment 3: Learn to predict both rotation and translation between two 3D SfM graphs.
 
 Usage:
     uv run e3_learn_rotation_and_trans.py --config-name e3_0_base.yaml
@@ -24,8 +24,8 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-from generate_data import load_dataset
-from models.models import SiameseGCN_v6
+from generate_data import get_dataset
+from models.models import get_model
 from utils.eval import evaluate
 from utils.loss import compute_combined_loss, compute_angular_error
 
@@ -46,8 +46,7 @@ def main(cfg: DictConfig):
     random.seed(43)
 
     # Load dataset
-    output_dir = pathlib.Path('data/samples_v2_rot_and_trans')
-    dataset = load_dataset(output_dir, include_image_features=False)
+    dataset = get_dataset(cfg.dataset.name, cfg.dataset.include_image_features)
     log(f"Loaded dataset with {len(dataset)} samples")
     log("Metadata:")
     pprint(dataset.metadata)
@@ -103,8 +102,9 @@ def main(cfg: DictConfig):
     num_node_features = sample_graph_a.x.shape[1]
 
     # Define the model
-    model = SiameseGCN_v6(
-        num_node_features,
+    model = get_model(
+        cfg.model.name,
+        num_node_features=num_node_features,
         graph_embedding_dim=cfg.model.embedding_size
     ).to(device)
     writer.add_text("model", str(model))

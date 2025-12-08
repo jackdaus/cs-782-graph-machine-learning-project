@@ -1,10 +1,10 @@
 """
-e3_learn_rotation_and_trans.py
+e2_learn_rotation.py
 
-Experiment 2: Learn to predict 3D rotation between two graphs using a Siamese GNN.
+Experiment 2: Learn to predict rotation between two graphs.
 
 Usage:
-    uv run e3_learn_rotation_and_trans.py --config-name e3_0_base.yaml
+    uv run e2_learn_rotation.py --config-name e2_0_base.yaml
 """
 
 import pathlib
@@ -17,14 +17,15 @@ import hydra
 import numpy as np
 import roma
 import torch
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-from generate_data import load_dataset
-from models.models import SiameseGCN_v6
+from generate_data import get_dataset
+from models.models import get_model
 from utils.eval import evaluate
 from utils.loss import compute_combined_loss, compute_angular_error
 
@@ -34,7 +35,7 @@ def log(msg: str = ""):
     print(msg, flush=True)
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config_e2_learn_rotation")
+@hydra.main(version_base=None, config_path="conf/e2", config_name="e2_0_base")
 def main(cfg: DictConfig):
     # Device setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -45,8 +46,7 @@ def main(cfg: DictConfig):
     random.seed(43)
 
     # Load dataset
-    output_dir = pathlib.Path('data/samples_v2_rot_and_trans')
-    dataset = load_dataset(output_dir, include_image_features=False)
+    dataset = get_dataset(cfg.dataset.name, cfg.dataset.include_image_features)
     log(f"Loaded dataset with {len(dataset)} samples")
     log("Metadata:")
     pprint(dataset.metadata)
@@ -88,7 +88,8 @@ def main(cfg: DictConfig):
 
     # Setup output directory
     timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_dir = pathlib.Path(f'runs/e2_learn_rotation/{timestamp_str}')
+    config_name = HydraConfig.get().job.config_name
+    run_dir = pathlib.Path(f'runs/{config_name}/{timestamp_str}')
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Setup TensorBoard
@@ -101,8 +102,9 @@ def main(cfg: DictConfig):
     num_node_features = sample_graph_a.x.shape[1]
 
     # Define the model
-    model = SiameseGCN_v6(
-        num_node_features,
+    model = get_model(
+        cfg.model.name,
+        num_node_features=num_node_features,
         graph_embedding_dim=cfg.model.embedding_size
     ).to(device)
     writer.add_text("model", str(model))

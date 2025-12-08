@@ -8,37 +8,21 @@ To generate the data from colmap reconstructions, use the `generate_data.py` scr
 
 (#TODO describe downloading colmap data)
 
-To generate the samples for experiment 1:
+To generate the 3 datasets used in the experiments.
 ```bash
-uv run generate_data.py --config-name data_generation_v1_translation_only
+# Dataset with only translations perturbations applied
+uv run generate_data.py --config-name v1_trans_only
+
+# Dataset with only rotations perturbations applied
+uv run generate_data.py --config-name v2_rot_only
+
+# Dataset with both rotations and translations perturbations applied
+uv run generate_data.py --config-name v3_rot_and_trans
 ```
 
-To generate the samples for experiment 2:
-```bash
-uv run generate_data.py --config-name data_generation_v2_rot_and_trans
-```
+## Data Generation Details
 
-To generate the samples for experiment 2:
-```bash
-uv run generate_data.py --config-name data_generation_v3_rot_and_small_trans
-```
-
-## Data Details
-Generate training data from a COLMAP reconstruction:
-
-```bash
-# Default config
-uv run python generate_data.py
-
-# Override parameters
-uv run python generate_data.py generation.num_samples=500 features.img_size=64
-
-# Use preset configs
-uv run python generate_data.py --config-name data_generation_small  # Quick testing
-uv run python generate_data.py --config-name data_generation_large  # Full dataset
-```
-
-Configuration is in `conf/data_generation.yaml`. Key parameters:
+Configuration is in `conf/data_gen/base.yaml`. Key parameters:
 - `paths.model` - COLMAP reconstruction directory
 - `paths.images` - Source images directory  
 - `paths.output` - Output directory (default: `data/generated`)

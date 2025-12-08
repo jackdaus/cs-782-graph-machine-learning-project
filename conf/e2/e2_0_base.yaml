@@ -3,15 +3,15 @@ model:
   embedding_size: 64
 
 dataset:
-  name: samples_v3_rot_and_trans
+  name: samples_v2_rot_only
   include_image_features: false
 
 training:
-  num_epochs: 500
+  num_epochs: 10
   batch_size: 32
   lr: 0.001
-  lambda_translation: 1.0
-  lambda_frobenius: 0.01
+#  lambda_translation: 1.0
+#  lambda_frobenius: 0.01
   scheduler:
     enabled: true
     step_size: 100

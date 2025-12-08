@@ -4,7 +4,7 @@ e1_learn_translation.py
 Experiment 1: Learn to predict the translation between two 3D graphs using a Siamese GAT model.
 
 Usage:
-    uv run e1_learn_translation.py --config-name config_e1_learn_translation.yaml
+    uv run e1_learn_translation.py --config-name e1_0_base.yaml
 """
 
 import pathlib
@@ -16,13 +16,14 @@ from pprint import pprint
 import hydra
 import numpy as np
 import torch
+from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-from generate_data import load_dataset
+from generate_data import get_dataset
 from models.models import SiameseGAT_v7
 from utils.eval import evaluate
 
@@ -32,7 +33,7 @@ def log(msg: str = ""):
     print(msg, flush=True)
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config_e1_learn_translation")
+@hydra.main(version_base=None, config_path="conf/e1", config_name="e1_0_base")
 def main(cfg: DictConfig):
     # Device setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,8 +44,7 @@ def main(cfg: DictConfig):
     random.seed(43)
 
     # Load dataset
-    output_dir = pathlib.Path('data/samples_v1_translation_only')
-    dataset = load_dataset(output_dir, include_image_features=False)
+    dataset = get_dataset(cfg.dataset.name, cfg.dataset.include_image_features)
     log(f"Loaded dataset with {len(dataset)} samples")
     log("Metadata:")
     pprint(dataset.metadata)
@@ -89,6 +89,12 @@ def main(cfg: DictConfig):
     timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
     writer = SummaryWriter(f'runs/e1_learn_translation/{timestamp_str}')
     writer.add_text("config", OmegaConf.to_yaml(cfg))
+
+    # Setup output directory
+    timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+    config_name = HydraConfig.get().job.config_name
+    run_dir = pathlib.Path(f'runs/{config_name}/{timestamp_str}')
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     # Get feature dimension from first sample
     sample_graph_a, _, _, _ = dataset[0]
@@ -203,11 +209,9 @@ def main(cfg: DictConfig):
                 writer.add_scalar('translation_error/val', avg_val_translation_error, epoch)
 
     log(f"\nTraining complete. Final train loss: {epoch_losses_train[-1]:.4f}")
-    log(f"TensorBoard logs saved to: runs/e1_learn_translation/{timestamp_str}")
 
     # Save model checkpoint
-    checkpoint_path = pathlib.Path(f"runs/e1_learn_translation/{timestamp_str}/model.pt")
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = run_dir / "model.pt"
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),

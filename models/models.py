@@ -371,3 +371,39 @@ class SiameseGAT_v7(nn.Module):
         # Return both outputs as a tuple
         h = (h_translation, rot_mat_raw)
         return h
+
+
+# =============================================================================
+# Model Registry
+# =============================================================================
+# Maps model names (strings) to their classes for easy config-based selection
+
+MODEL_REGISTRY = {
+    "SiameseGCN_v1": SiameseGCN_v1,
+    "SiameseGCN_v2": SiameseGCN_v2,
+    "SiameseGCN_v3": SiameseGCN_v3,
+    "SiameseGCN_v4": SiameseGCN_v4,
+    "SiameseGCN_v5": SiameseGCN_v5,
+    "SiameseGCN_v6": SiameseGCN_v6,
+    "SiameseGAT_v7": SiameseGAT_v7,
+}
+
+
+def get_model(name: str, **kwargs) -> nn.Module:
+    """
+    Get a model by name from the registry.
+
+    Args:
+        name: Model name (e.g., "SiameseGCN_v6", "SiameseGAT_v7")
+        **kwargs: Arguments to pass to the model constructor
+
+    Returns:
+        Instantiated model
+
+    Raises:
+        ValueError: If model name is not found in registry
+    """
+    if name not in MODEL_REGISTRY:
+        available = ", ".join(MODEL_REGISTRY.keys())
+        raise ValueError(f"Unknown model '{name}'. Available models: {available}")
+    return MODEL_REGISTRY[name](**kwargs)
