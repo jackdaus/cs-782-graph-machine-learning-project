@@ -4,6 +4,10 @@ defaults:
 paths:
   output: data/samples_v3_rot_and_trans
 
+features:
+  include_image_features: true
+  img_size: 5
+
 transform:
   translation_min: -3.0
   translation_max: 3.0

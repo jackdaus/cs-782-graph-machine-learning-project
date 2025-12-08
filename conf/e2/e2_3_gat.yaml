@@ -1,5 +1,6 @@
+# Configuration for rotation learning with GAT encoder
 model:
-  name: SiameseGCN
+  name: SiameseGAT
   embedding_size: 64
   # Rotation representation: "matrix" (9D) or "quaternion" (4D)
   rotation_representation: matrix
@@ -9,11 +10,11 @@ dataset:
   include_image_features: false
 
 training:
-  num_epochs: 500
+  num_epochs: 100
   batch_size: 32
-  lr: 0.01
+  lr: 0.001
   # Loss weighting
-  lambda_translation: 0.1
+  lambda_translation: 1.0
   lambda_frobenius: 0.01
   # Rotation loss function: "l1", "mse", "frobenius", "quaternion"
   rotation_loss: l1
@@ -23,3 +24,4 @@ training:
     enabled: true
     step_size: 100
     gamma: 0.8
+

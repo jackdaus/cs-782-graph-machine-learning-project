@@ -1,0 +1,5 @@
+defaults:
+  - e2_0_base
+
+training:
+  use_frobenius_regularization: false

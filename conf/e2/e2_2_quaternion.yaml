@@ -1,0 +1,27 @@
+# Configuration for rotation learning with quaternion representation
+model:
+  name: SiameseGCN
+  embedding_size: 64
+  # Rotation representation: "matrix" (9D) or "quaternion" (4D)
+  rotation_representation: quaternion
+
+dataset:
+  name: samples_v2_rot_only
+  include_image_features: false
+
+training:
+  num_epochs: 100
+  batch_size: 32
+  lr: 0.001
+  # Loss weighting
+  lambda_translation: 1.0
+  lambda_frobenius: 0.0  # Not used for quaternion representation
+  # Rotation loss function: "quaternion" is recommended for quaternions
+  rotation_loss: quaternion
+  # Frobenius regularization not applicable for quaternion representation
+  use_frobenius_regularization: false
+  scheduler:
+    enabled: true
+    step_size: 100
+    gamma: 0.8
+

@@ -316,7 +316,7 @@ def load_dataset(
 # Maps dataset names (strings) to their directory paths for easy config-based selection
 
 DATASET_REGISTRY = {
-    "samples_v1_trans_only": "data/samples_v1_trans_only",
+    "samples_v1_trans_only": "data/samples_v1_trans_only", 
     "samples_v2_rot_only": "data/samples_v2_rot_only",
     "samples_v3_rot_and_trans": "data/samples_v3_rot_and_trans",
 }
@@ -325,14 +325,14 @@ DATASET_REGISTRY = {
 def get_dataset(name: str, include_image_features: bool = False) -> EfficientSfmPairDataset:
     """
     Get a dataset by name from the registry.
-
+    
     Args:
         name: Dataset name (e.g., "samples_v2_rot_and_trans", "samples_v1_translation_only")
         include_image_features: Whether to include image features in node features
-
+        
     Returns:
         Loaded EfficientSfmPairDataset
-
+        
     Raises:
         ValueError: If dataset name is not found in registry
         FileNotFoundError: If dataset directory doesn't exist
@@ -340,11 +340,11 @@ def get_dataset(name: str, include_image_features: bool = False) -> EfficientSfm
     if name not in DATASET_REGISTRY:
         available = ", ".join(DATASET_REGISTRY.keys())
         raise ValueError(f"Unknown dataset '{name}'. Available datasets: {available}")
-
+    
     output_dir = pathlib.Path(DATASET_REGISTRY[name])
     if not output_dir.exists():
         raise FileNotFoundError(f"Dataset directory does not exist: {output_dir}")
-
+    
     return load_dataset(output_dir, include_image_features)
 
 

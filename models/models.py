@@ -373,29 +373,140 @@ class SiameseGAT_v7(nn.Module):
         return h
 
 
+class SiameseGCN_v8(nn.Module):
+    """
+    A configurable Siamese GCN model that predicts translation (x, y, z) and rotation between two graphs.
+
+    This version supports configurable rotation output dimension:
+    - rotation_output_dim=4: Output quaternion (x, y, z, w)
+    - rotation_output_dim=9: Output flattened 3x3 rotation matrix
+
+    Uses weight sharing between the two sister graph embedding networks.
+    Does not normalize/project the rotation output (caller is responsible for that).
+    """
+    def __init__(self, num_node_features: int, graph_embedding_dim: int = 64, rotation_output_dim: int = 9):
+        super().__init__()
+        self.rotation_output_dim = rotation_output_dim
+
+        # Use only one sister network for both inputs (weight sharing)
+        self.sfm_encoder = GraphEmbeddingGCN_v2(num_node_features, output_dim=graph_embedding_dim)
+
+        # Output: 3 scalars for translation + rotation_output_dim scalars for rotation
+        total_output_dim = 3 + rotation_output_dim
+        self.mlp_trans_rot_head = nn.Sequential(
+            nn.Linear(graph_embedding_dim * 2, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, total_output_dim)
+        )
+
+    def forward(self, graph_data_1: torch_geometric.data.Data, graph_data_2: torch_geometric.data.Data) -> tuple[torch.Tensor, torch.Tensor]:
+        # Project graph1 and graph2 into the embedding space
+        e1 = self.sfm_encoder(graph_data_1)
+        e2 = self.sfm_encoder(graph_data_2)
+
+        # Concatenate the features
+        h = torch.cat((e1, e2), dim=1)
+        # Run through an MLP to predict translation and rotation together
+        h_trans_rot = self.mlp_trans_rot_head(h)
+        # The translation is the first 3 values
+        h_translation = h_trans_rot[:, :3]
+        # The rotation is the remaining values
+        h_rotation_raw = h_trans_rot[:, 3:]
+
+        # Reshape rotation output based on dimension
+        if self.rotation_output_dim == 9:
+            # Reshape to (batch_size, 3, 3) for rotation matrix
+            h_rotation_raw = h_rotation_raw.view(-1, 3, 3)
+        # For quaternion (dim=4), keep as (batch_size, 4)
+
+        return (h_translation, h_rotation_raw)
+
+
+class SiameseGAT_v8(nn.Module):
+    """
+    A configurable Siamese GAT model that predicts translation (x, y, z) and rotation between two graphs.
+
+    This version supports configurable rotation output dimension:
+    - rotation_output_dim=4: Output quaternion (x, y, z, w)
+    - rotation_output_dim=9: Output flattened 3x3 rotation matrix
+
+    Uses weight sharing between the two sister graph embedding networks.
+    Uses Graph Attention Networks (GAT) instead of GCN for the encoder.
+    Does not normalize/project the rotation output (caller is responsible for that).
+    """
+    def __init__(self, num_node_features: int, graph_embedding_dim: int = 64, rotation_output_dim: int = 9):
+        super().__init__()
+        self.rotation_output_dim = rotation_output_dim
+
+        # Use only one sister network for both inputs (weight sharing)
+        self.sfm_encoder = GraphEmbeddingGAT_v3(num_node_features, output_dim=graph_embedding_dim)
+
+        # Output: 3 scalars for translation + rotation_output_dim scalars for rotation
+        total_output_dim = 3 + rotation_output_dim
+        self.mlp_trans_rot_head = nn.Sequential(
+            nn.Linear(graph_embedding_dim * 2, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, total_output_dim)
+        )
+
+    def forward(self, graph_data_1: torch_geometric.data.Data, graph_data_2: torch_geometric.data.Data) -> tuple[torch.Tensor, torch.Tensor]:
+        # Project graph1 and graph2 into the embedding space
+        e1 = self.sfm_encoder(graph_data_1)
+        e2 = self.sfm_encoder(graph_data_2)
+
+        # Concatenate the features
+        h = torch.cat((e1, e2), dim=1)
+        # Run through an MLP to predict translation and rotation together
+        h_trans_rot = self.mlp_trans_rot_head(h)
+        # The translation is the first 3 values
+        h_translation = h_trans_rot[:, :3]
+        # The rotation is the remaining values
+        h_rotation_raw = h_trans_rot[:, 3:]
+
+        # Reshape rotation output based on dimension
+        if self.rotation_output_dim == 9:
+            # Reshape to (batch_size, 3, 3) for rotation matrix
+            h_rotation_raw = h_rotation_raw.view(-1, 3, 3)
+        # For quaternion (dim=4), keep as (batch_size, 4)
+
+        return (h_translation, h_rotation_raw)
+
+
 # =============================================================================
 # Model Registry
 # =============================================================================
 # Maps model names (strings) to their classes for easy config-based selection
+# All models in the registry must have the same interface:
+#   __init__(num_node_features: int, graph_embedding_dim: int, rotation_output_dim: int)
+#   forward(graph_data_1, graph_data_2) -> (translation, rotation)
 
 MODEL_REGISTRY = {
-    "SiameseGCN_v1": SiameseGCN_v1,
-    "SiameseGCN_v2": SiameseGCN_v2,
-    "SiameseGCN_v3": SiameseGCN_v3,
-    "SiameseGCN_v4": SiameseGCN_v4,
-    "SiameseGCN_v5": SiameseGCN_v5,
-    "SiameseGCN_v6": SiameseGCN_v6,
-    "SiameseGAT_v7": SiameseGAT_v7,
+    "SiameseGCN": SiameseGCN_v8,
+    "SiameseGAT": SiameseGAT_v8,
 }
 
 
-def get_model(name: str, **kwargs) -> nn.Module:
+def get_model(
+    name: str,
+    num_node_features: int,
+    graph_embedding_dim: int,
+    rotation_output_dim: int,
+) -> nn.Module:
     """
     Get a model by name from the registry.
 
+    All models have a standardized interface for predicting translation and rotation
+    between two graphs.
+
     Args:
-        name: Model name (e.g., "SiameseGCN_v6", "SiameseGAT_v7")
-        **kwargs: Arguments to pass to the model constructor
+        name: Model name. Options: "SiameseGCN", "SiameseGAT"
+        num_node_features: Number of input features per node
+        graph_embedding_dim: Dimension of the graph embedding space
+        rotation_output_dim: Dimension of rotation output (4 for quaternion, 9 for matrix)
 
     Returns:
         Instantiated model
@@ -406,4 +517,14 @@ def get_model(name: str, **kwargs) -> nn.Module:
     if name not in MODEL_REGISTRY:
         available = ", ".join(MODEL_REGISTRY.keys())
         raise ValueError(f"Unknown model '{name}'. Available models: {available}")
-    return MODEL_REGISTRY[name](**kwargs)
+
+    return MODEL_REGISTRY[name](
+        num_node_features=num_node_features,
+        graph_embedding_dim=graph_embedding_dim,
+        rotation_output_dim=rotation_output_dim,
+    )
+
+
+# =============================================================================
+# Legacy Models (kept for backward compatibility with old checkpoints)
+# =============================================================================

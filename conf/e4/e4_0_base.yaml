@@ -5,7 +5,7 @@ model:
 
 dataset:
   name: samples_v3_rot_and_trans
-  include_image_features: false
+  include_image_features: true
 
 training:
   num_epochs: 100
