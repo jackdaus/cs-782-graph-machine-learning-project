@@ -1,10 +1,10 @@
 """
-e1_learn_translation.py
+e3_learn_rotation_and_trans.py
 
-Experiment 1: Learn to predict the translation between two 3D graphs using a Siamese GAT model.
+Experiment 2: Learn to predict 3D rotation between two graphs using a Siamese GNN.
 
 Usage:
-    uv run e1_learn_translation.py --config-name config_e1_learn_translation.yaml
+    uv run e3_learn_rotation_and_trans.py --config-name e3_0_base.yaml
 """
 
 import pathlib
@@ -15,6 +15,7 @@ from pprint import pprint
 
 import hydra
 import numpy as np
+import roma
 import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import random_split
@@ -23,8 +24,9 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 from generate_data import load_dataset
-from models.models import SiameseGAT_v7
+from models.models import SiameseGCN_v6
 from utils.eval import evaluate
+from utils.loss import compute_combined_loss, compute_angular_error
 
 
 def log(msg: str = ""):
@@ -32,7 +34,7 @@ def log(msg: str = ""):
     print(msg, flush=True)
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config_e1_learn_translation")
+@hydra.main(version_base=None, config_path="conf", config_name="config_e2_learn_rotation")
 def main(cfg: DictConfig):
     # Device setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,7 +45,7 @@ def main(cfg: DictConfig):
     random.seed(43)
 
     # Load dataset
-    output_dir = pathlib.Path('data/samples_v1_translation_only')
+    output_dir = pathlib.Path('data/samples_v2_rot_and_trans')
     dataset = load_dataset(output_dir, include_image_features=False)
     log(f"Loaded dataset with {len(dataset)} samples")
     log("Metadata:")
@@ -84,10 +86,14 @@ def main(cfg: DictConfig):
     log(f"Train: {len(train_dataset)} samples, {len(train_loader)} batches")
     log(f"Val: {len(val_dataset)} samples, {len(val_loader)} batches")
 
+    # Setup output directory
+    timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_dir = pathlib.Path(f'runs/e2_learn_rotation/{timestamp_str}')
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     # Setup TensorBoard
     # View results by running: tensorboard --logdir=runs
-    timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
-    writer = SummaryWriter(f'runs/e1_learn_translation/{timestamp_str}')
+    writer = SummaryWriter(str(run_dir))
     writer.add_text("config", OmegaConf.to_yaml(cfg))
 
     # Get feature dimension from first sample
@@ -95,14 +101,15 @@ def main(cfg: DictConfig):
     num_node_features = sample_graph_a.x.shape[1]
 
     # Define the model
-    model = SiameseGAT_v7(
+    model = SiameseGCN_v6(
         num_node_features,
         graph_embedding_dim=cfg.model.embedding_size
     ).to(device)
     writer.add_text("model", str(model))
 
     # Optimizer and scheduler
-    optimizer = torch.optim.SGD(model.parameters(), lr=cfg.training.lr, momentum=0.9)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=cfg.training.lr, momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.lr)
     scheduler = None
     if cfg.training.scheduler.enabled:
         scheduler = torch.optim.lr_scheduler.StepLR(
@@ -113,6 +120,7 @@ def main(cfg: DictConfig):
 
     # Loss functions
     criterion_translation = torch.nn.MSELoss()
+    criterion_rotation = torch.nn.L1Loss()
 
     # Training loop
     epoch_losses_train = []
@@ -123,6 +131,9 @@ def main(cfg: DictConfig):
             model.train()
             train_loss_all = 0.0
             train_loss_translation = 0.0
+            train_loss_rotation = 0.0
+            train_angular_error = 0.0
+            train_frobenius_norm = 0.0
             train_translation_error = 0.0
 
             for batch in train_loader:
@@ -130,12 +141,32 @@ def main(cfg: DictConfig):
                 graph_a_batch = batch[0].to(device)
                 graph_b_batch = batch[1].to(device)
                 labels_translations = batch[2].to(device)
+                labels_quat_xyzw = batch[3].to(device)
 
                 optimizer.zero_grad()
                 pred_translation, pred_rotation_raw = model(graph_a_batch, graph_b_batch)
 
-                loss_trans = criterion_translation(pred_translation, labels_translations)
-                loss = loss_trans
+                # "Normalize" the predicted matrix so that it is a valid SO(3) rotation matrix
+                pred_rotation = roma.special_procrustes(pred_rotation_raw)
+
+                # Calculate Frobenius norm between pred_rotation_raw and pred_rotation
+                # This measures how far the raw prediction is from the SO(3) manifold
+                frobenius_norm = torch.norm(pred_rotation_raw - pred_rotation, p='fro', dim=(-2, -1)).mean()
+
+                # Calculate losses using the helper function
+                loss, loss_trans, loss_rotation = compute_combined_loss(
+                    pred_translation, pred_rotation, labels_translations, labels_quat_xyzw,
+                    criterion_translation, criterion_rotation, cfg.training.lambda_translation
+                )
+
+                # Add Frobenius norm as regularization term
+                lambda_frobenius = cfg.training.lambda_frobenius
+                loss = loss + lambda_frobenius * frobenius_norm
+
+                # Calculate angular error
+                true_rotmat = roma.unitquat_to_rotmat(labels_quat_xyzw)
+                angular_error = compute_angular_error(pred_rotation, true_rotmat)
+                train_angular_error += angular_error.mean().item()
 
                 # Calculate translation error (L2 norm)
                 translation_error = torch.norm(pred_translation - labels_translations, p=2, dim=-1).mean()
@@ -147,41 +178,70 @@ def main(cfg: DictConfig):
 
                 train_loss_all += loss.item()
                 train_loss_translation += loss_trans.item()
+                train_loss_rotation += loss_rotation.item()
+                train_frobenius_norm += frobenius_norm.item()
 
             # Average losses
             avg_loss = train_loss_all / len(train_loader)
             avg_loss_translation = train_loss_translation / len(train_loader)
+            avg_loss_rotation = train_loss_rotation / len(train_loader)
+            avg_angular_error = train_angular_error / len(train_loader)
+            avg_frobenius_norm = train_frobenius_norm / len(train_loader)
             avg_translation_error = train_translation_error / len(train_loader)
 
             # Log to TensorBoard
             writer.add_scalar('loss_all/train', avg_loss, epoch)
             writer.add_scalar('loss_translation/train', avg_loss_translation, epoch)
+            writer.add_scalar('loss_rotation/train', avg_loss_rotation, epoch)
+            writer.add_scalar('angular_error/train', avg_angular_error, epoch)
+            writer.add_scalar('frobenius_norm/train', avg_frobenius_norm, epoch)
             writer.add_scalar('translation_error/train', avg_translation_error, epoch)
 
             epoch_losses_train.append(avg_loss)
-            pbar.set_postfix({'loss': f'{avg_loss:.4f}', 'loss_trans': f'{avg_loss_translation:.4f}'})
+            pbar.set_postfix({'loss': f'{avg_loss:.4f}', 'loss_trans': f'{avg_loss_translation:.4f}',
+                              'loss_rot:': f'{avg_loss_rotation:.4f}', 'ang_err': f'{avg_angular_error:.2f}°',
+                              'frob': f'{avg_frobenius_norm:.4f}' })
 
             # Learning rate decay
             if scheduler is not None:
                 scheduler.step()
 
-            # Validation every 10 epochs
+            # Validation
             if epoch % 10 == 0:
                 model.eval()
                 val_loss = 0.0
                 val_loss_translation = 0.0
+                val_loss_rotation = 0.0
+                val_angular_error = 0.0
+                val_frobenius_norm = 0.0
                 val_translation_error = 0.0
-
                 with torch.no_grad():
                     for batch in val_loader:
                         graph_a_batch = batch[0].to(device)
                         graph_b_batch = batch[1].to(device)
                         labels_translations = batch[2].to(device)
-
+                        labels_quat_xyzw = batch[3].to(device)
                         pred_translation, pred_rotation_raw = model(graph_a_batch, graph_b_batch)
+                        # "Normalize" the predicted matrix so that it is a valid SO(3) rotation matrix
+                        pred_rotation = roma.special_procrustes(pred_rotation_raw)
 
-                        loss_trans = criterion_translation(pred_translation, labels_translations)
-                        loss = loss_trans
+                        # Calculate Frobenius norm between pred_rotation_raw and pred_rotation
+                        frobenius_norm = torch.norm(pred_rotation_raw - pred_rotation, p='fro', dim=(-2, -1)).mean()
+
+                        # Calculate losses using the helper function
+                        loss, loss_trans, loss_rotation = compute_combined_loss(
+                            pred_translation, pred_rotation, labels_translations, labels_quat_xyzw,
+                            criterion_translation, criterion_rotation, cfg.training.lambda_translation
+                        )
+
+                        # Add Frobenius norm as regularization term
+                        lambda_frobenius = cfg.training.lambda_frobenius  # Weight for the regularization term
+                        loss = loss + lambda_frobenius * frobenius_norm
+
+                        # Calculate angular error
+                        true_rotmat = roma.unitquat_to_rotmat(labels_quat_xyzw)
+                        angular_error = compute_angular_error(pred_rotation, true_rotmat)
+                        val_angular_error += angular_error.mean().item()
 
                         # Calculate translation error (L2 norm)
                         translation_error = torch.norm(pred_translation - labels_translations, p=2, dim=-1).mean()
@@ -189,25 +249,27 @@ def main(cfg: DictConfig):
 
                         val_loss += loss.item()
                         val_loss_translation += loss_trans.item()
-
-                # Average validation losses
-                avg_val_loss = val_loss / len(val_loader)
-                avg_val_loss_translation = val_loss_translation / len(val_loader)
-                avg_val_translation_error = val_translation_error / len(val_loader)
-
-                epoch_losses_val[epoch] = avg_val_loss
-
-                # Log validation metrics
-                writer.add_scalar('loss_all/val', avg_val_loss, epoch)
-                writer.add_scalar('loss_translation/val', avg_val_loss_translation, epoch)
-                writer.add_scalar('translation_error/val', avg_val_translation_error, epoch)
+                        val_loss_rotation += loss_rotation.item()
+                        val_frobenius_norm += frobenius_norm.item()
+                    avg_val_loss = val_loss / len(val_loader)
+                    avg_val_loss_translation = val_loss_translation / len(val_loader)
+                    avg_val_loss_rotation = val_loss_rotation / len(val_loader)
+                    avg_val_angular_error = val_angular_error / len(val_loader)
+                    avg_val_frobenius_norm = val_frobenius_norm / len(val_loader)
+                    avg_val_translation_error = val_translation_error / len(val_loader)
+                    epoch_losses_val[epoch] = avg_val_loss
+                    writer.add_scalar('loss_all/val', avg_val_loss, epoch)
+                    writer.add_scalar('loss_translation/val', avg_val_loss_translation, epoch)
+                    writer.add_scalar('loss_rotation/val', avg_val_loss_rotation, epoch)
+                    writer.add_scalar('angular_error/val', avg_val_angular_error, epoch)
+                    writer.add_scalar('frobenius_norm/val', avg_val_frobenius_norm, epoch)
+                    writer.add_scalar('translation_error/val', avg_val_translation_error, epoch)
 
     log(f"\nTraining complete. Final train loss: {epoch_losses_train[-1]:.4f}")
-    log(f"TensorBoard logs saved to: runs/e1_learn_translation/{timestamp_str}")
+    log(f"TensorBoard logs saved to: {run_dir}")
 
     # Save model checkpoint
-    checkpoint_path = pathlib.Path(f"runs/e1_learn_translation/{timestamp_str}/model.pt")
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = run_dir / "model.pt"
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),

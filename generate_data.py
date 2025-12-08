@@ -315,7 +315,7 @@ def load_dataset(
 # ============================================================================
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="data_generation")
+@hydra.main(version_base=None, config_path="conf", config_name="data_generation_example")
 def main(cfg: DictConfig) -> None:
     """
     Main entry point for data generation with Hydra configuration.

@@ -4,6 +4,26 @@ todo
 
 ## Generating Data
 
+To generate the data from colmap reconstructions, use the `generate_data.py` script.
+
+(#TODO describe downloading colmap data)
+
+To generate the samples for experiment 1:
+```bash
+uv run generate_data.py --config-name data_generation_v1_translation_only
+```
+
+To generate the samples for experiment 2:
+```bash
+uv run generate_data.py --config-name data_generation_v2_rot_and_trans
+```
+
+To generate the samples for experiment 2:
+```bash
+uv run generate_data.py --config-name data_generation_v3_rot_and_small_trans
+```
+
+## Data Details
 Generate training data from a COLMAP reconstruction:
 
 ```bash
@@ -29,12 +49,6 @@ Configuration is in `conf/data_generation.yaml`. Key parameters:
 Output files:
 - `image_features.pt` - Shared image feature cache
 - `samples.pt` - Training samples
-
-
-TO generate the samples for experiment 1:
-```bash
-uv run python generate_data.py --config-name data_generation_v1_translation_only
-```
 
 --- 
 

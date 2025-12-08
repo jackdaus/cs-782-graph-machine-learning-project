@@ -302,14 +302,6 @@ class SiameseGCN_v6(nn.Module):
         self.sfm_encoder = GraphEmbeddingGCN_v2(num_node_features, output_dim = graph_embedding_dim)
 
         # This next part will take as input the embeddings from the sister network
-        # self.mlp_translation = nn.Sequential(
-        #     nn.Linear(graph_embedding_dim * 2, 8),
-        #     nn.ReLU(),
-        #     nn.Linear(8, 8),
-        #     nn.ReLU(),
-        #     # Output 3 scalars for (x, y, z) translation prediction
-        #     nn.Linear(8, 3)
-        # )
         self.mlp_trans_rot_head = nn.Sequential(
             nn.Linear(graph_embedding_dim * 2, 64),
             nn.ReLU(),
@@ -352,14 +344,6 @@ class SiameseGAT_v7(nn.Module):
         self.sfm_encoder = GraphEmbeddingGAT_v3(num_node_features, output_dim = graph_embedding_dim)
 
         # This next part will take as input the embeddings from the sister network
-        # self.mlp_translation = nn.Sequential(
-        #     nn.Linear(graph_embedding_dim * 2, 8),
-        #     nn.ReLU(),
-        #     nn.Linear(8, 8),
-        #     nn.ReLU(),
-        #     # Output 3 scalars for (x, y, z) translation prediction
-        #     nn.Linear(8, 3)
-        # )
         self.mlp_trans_rot_head = nn.Sequential(
             nn.Linear(graph_embedding_dim * 2, 64),
             nn.ReLU(),

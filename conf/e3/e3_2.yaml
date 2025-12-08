@@ -1,0 +1,6 @@
+defaults:
+  - e3_0_base
+
+training:
+  lambda_translation: 0.05
+  lambda_frobenius: 0.05
