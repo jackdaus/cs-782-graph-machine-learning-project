@@ -1,6 +1,8 @@
 model:
-#  name: SiameseGCN_v6 # TODO update the script to support this usage...
-  embedding_size: 16
+  name: SiameseGCN
+  embedding_size: 64
+  # Rotation representation: "matrix" (9D) or "quaternion" (4D)
+  rotation_representation: matrix
 
 dataset:
   name: samples_v1_trans_only
@@ -11,7 +13,8 @@ training:
   batch_size: 64
   lr: 0.001
   lambda_translation: 1.0
-  lambda_frobenius: 0.01
+  # Set to false to disable rotation loss (translation-only training)
+  enable_rotation_loss: false
   scheduler:
     enabled: true
     step_size: 200

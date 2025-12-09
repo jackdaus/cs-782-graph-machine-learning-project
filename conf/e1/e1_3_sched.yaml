@@ -1,0 +1,13 @@
+defaults:
+  - e1_0_base
+
+model:
+  name: SiameseGAT
+
+training:
+  num_epochs: 1000
+  lr: 0.001
+  scheduler:
+    enabled: true
+    step_size: 100
+    gamma: 0.8

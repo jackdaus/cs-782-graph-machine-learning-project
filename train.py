@@ -1,16 +1,9 @@
 """
-e2_learn_rotation.py
-
-Experiment 2: Learn to predict rotation between two graphs.
-
-Supports configurable:
-- Rotation representation: quaternion (4D) or matrix (9D)
-- Rotation loss function: l1, mse, frobenius, geodesic, quaternion_geodesic
-- Frobenius norm regularization (for matrix representation)
+train.py
 
 Usage:
-    uv run e2_learn_rotation.py --config-name e2_0_base.yaml
-    uv run e2_learn_rotation.py --config-name e2_2_quaternion.yaml
+    uv run train.py --config-name e2_0_base.yaml
+    uv run train.py --config-name e2_2_quaternion.yaml
 """
 
 import pathlib
@@ -90,15 +83,31 @@ def main(cfg: DictConfig):
     # Extract rotation configuration
     rotation_representation = cfg.model.rotation_representation
     rotation_output_dim = 4 if rotation_representation == "quaternion" else 9
-    use_frobenius_reg = cfg.training.use_frobenius_regularization
+
+    # Enable rotation loss by default (for backward compatibility)
+    enable_rotation_loss = cfg.training.get("enable_rotation_loss", True)
+
+    # Only require rotation-related config when rotation loss is enabled
+    if enable_rotation_loss:
+        use_frobenius_reg = cfg.training.use_frobenius_regularization
+        rotation_loss_type = cfg.training.rotation_loss
+    else:
+        # Use sensible defaults when rotation loss is disabled
+        use_frobenius_reg = cfg.training.get("use_frobenius_regularization", False)
+        rotation_loss_type = cfg.training.get("rotation_loss", "l1")
 
     # Validate configuration
     if rotation_representation == "quaternion" and use_frobenius_reg:
         log("Warning: Frobenius regularization is not applicable for quaternion representation, disabling.")
         use_frobenius_reg = False
 
+    # Disable Frobenius regularization if rotation loss is disabled
+    if not enable_rotation_loss and use_frobenius_reg:
+        log("Warning: Frobenius regularization disabled because rotation loss is disabled.")
+        use_frobenius_reg = False
+
     log(f"Rotation representation: {rotation_representation} (dim={rotation_output_dim})")
-    log(f"Rotation loss: {cfg.training.rotation_loss}")
+    log(f"Rotation loss: {rotation_loss_type} (enabled={enable_rotation_loss})")
     log(f"Frobenius regularization: {use_frobenius_reg}")
 
     # Load dataset
@@ -178,7 +187,9 @@ def main(cfg: DictConfig):
 
     # Loss functions
     criterion_translation = torch.nn.MSELoss()
-    criterion_rotation = get_rotation_loss(cfg.training.rotation_loss, rotation_representation)
+    criterion_rotation = None
+    if enable_rotation_loss:
+        criterion_rotation = get_rotation_loss(rotation_loss_type, rotation_representation)
 
     # Training loop
     epoch_losses_train = []
@@ -204,36 +215,42 @@ def main(cfg: DictConfig):
                 optimizer.zero_grad()
                 pred_translation, pred_rotation_raw = model(graph_a_batch, graph_b_batch)
 
-                # Process rotation output based on representation
-                pred_rotation = process_rotation_output(pred_rotation_raw, rotation_representation)
-
-                # Calculate Frobenius norm (only meaningful for matrix representation)
-                if use_frobenius_reg and rotation_representation == "matrix":
-                    frobenius_norm = compute_frobenius_regularization(pred_rotation_raw, pred_rotation)
-                else:
-                    frobenius_norm = torch.tensor(0.0, device=device)
-
                 # Calculate translation loss
                 loss_trans = criterion_translation(pred_translation, labels_translations)
+                loss = cfg.training.lambda_translation * loss_trans
 
-                # Calculate rotation loss using the configured loss function
-                # For matrix representation, pass the projected rotation
-                # For quaternion representation, pass the raw quaternion
-                if rotation_representation == "matrix":
-                    loss_rotation = criterion_rotation(pred_rotation, labels_quat_xyzw)
-                else:
-                    loss_rotation = criterion_rotation(pred_rotation_raw, labels_quat_xyzw)
+                # Initialize rotation-related metrics
+                loss_rotation = torch.tensor(0.0, device=device)
+                frobenius_norm = torch.tensor(0.0, device=device)
+                angular_error = torch.tensor(0.0, device=device)
 
-                # Combine losses
-                loss = cfg.training.lambda_translation * loss_trans + loss_rotation
+                if enable_rotation_loss:
+                    # Process rotation output based on representation
+                    pred_rotation = process_rotation_output(pred_rotation_raw, rotation_representation)
 
-                # Add Frobenius norm as regularization term (if enabled)
-                if use_frobenius_reg:
-                    loss = loss + cfg.training.lambda_frobenius * frobenius_norm
+                    # Calculate Frobenius norm (only meaningful for matrix representation)
+                    if use_frobenius_reg and rotation_representation == "matrix":
+                        frobenius_norm = compute_frobenius_regularization(pred_rotation_raw, pred_rotation)
 
-                # Calculate angular error for monitoring
-                true_rotmat = roma.unitquat_to_rotmat(labels_quat_xyzw)
-                angular_error = compute_angular_error(pred_rotation, true_rotmat)
+                    # Calculate rotation loss using the configured loss function
+                    # For matrix representation, pass the projected rotation
+                    # For quaternion representation, pass the raw quaternion
+                    if rotation_representation == "matrix":
+                        loss_rotation = criterion_rotation(pred_rotation, labels_quat_xyzw)
+                    else:
+                        loss_rotation = criterion_rotation(pred_rotation_raw, labels_quat_xyzw)
+
+                    # Add rotation loss
+                    loss = loss + loss_rotation
+
+                    # Add Frobenius norm as regularization term (if enabled)
+                    if use_frobenius_reg:
+                        loss = loss + cfg.training.lambda_frobenius * frobenius_norm
+
+                    # Calculate angular error for monitoring
+                    true_rotmat = roma.unitquat_to_rotmat(labels_quat_xyzw)
+                    angular_error = compute_angular_error(pred_rotation, true_rotmat)
+
                 train_angular_error += angular_error.mean().item()
 
                 # Calculate translation error (L2 norm)
@@ -291,34 +308,40 @@ def main(cfg: DictConfig):
                         labels_quat_xyzw = batch[3].to(device)
                         pred_translation, pred_rotation_raw = model(graph_a_batch, graph_b_batch)
 
-                        # Process rotation output based on representation
-                        pred_rotation = process_rotation_output(pred_rotation_raw, rotation_representation)
-
-                        # Calculate Frobenius norm
-                        if rotation_representation == "matrix":
-                            frobenius_norm = compute_frobenius_regularization(pred_rotation_raw, pred_rotation)
-                        else:
-                            frobenius_norm = torch.tensor(0.0, device=device)
-
                         # Calculate translation loss
                         loss_trans = criterion_translation(pred_translation, labels_translations)
+                        loss = cfg.training.lambda_translation * loss_trans
 
-                        # Calculate rotation loss
-                        if rotation_representation == "matrix":
-                            loss_rotation = criterion_rotation(pred_rotation, labels_quat_xyzw)
-                        else:
-                            loss_rotation = criterion_rotation(pred_rotation_raw, labels_quat_xyzw)
+                        # Initialize rotation-related metrics
+                        loss_rotation = torch.tensor(0.0, device=device)
+                        frobenius_norm = torch.tensor(0.0, device=device)
+                        angular_error = torch.tensor(0.0, device=device)
 
-                        # Combine losses
-                        loss = cfg.training.lambda_translation * loss_trans + loss_rotation
+                        if enable_rotation_loss:
+                            # Process rotation output based on representation
+                            pred_rotation = process_rotation_output(pred_rotation_raw, rotation_representation)
 
-                        # Add Frobenius norm regularization
-                        if use_frobenius_reg:
-                            loss = loss + cfg.training.lambda_frobenius * frobenius_norm
+                            # Calculate Frobenius norm
+                            if rotation_representation == "matrix":
+                                frobenius_norm = compute_frobenius_regularization(pred_rotation_raw, pred_rotation)
 
-                        # Calculate angular error
-                        true_rotmat = roma.unitquat_to_rotmat(labels_quat_xyzw)
-                        angular_error = compute_angular_error(pred_rotation, true_rotmat)
+                            # Calculate rotation loss
+                            if rotation_representation == "matrix":
+                                loss_rotation = criterion_rotation(pred_rotation, labels_quat_xyzw)
+                            else:
+                                loss_rotation = criterion_rotation(pred_rotation_raw, labels_quat_xyzw)
+
+                            # Add rotation loss
+                            loss = loss + loss_rotation
+
+                            # Add Frobenius norm regularization
+                            if use_frobenius_reg:
+                                loss = loss + cfg.training.lambda_frobenius * frobenius_norm
+
+                            # Calculate angular error
+                            true_rotmat = roma.unitquat_to_rotmat(labels_quat_xyzw)
+                            angular_error = compute_angular_error(pred_rotation, true_rotmat)
+
                         val_angular_error += angular_error.mean().item()
 
                         # Calculate translation error (L2 norm)
@@ -356,6 +379,7 @@ def main(cfg: DictConfig):
         'num_node_features': num_node_features,
         'final_train_loss': epoch_losses_train[-1],
         'rotation_representation': rotation_representation,
+        'enable_rotation_loss': enable_rotation_loss,
     }, checkpoint_path)
     log(f"Model checkpoint saved to: {checkpoint_path}")
 

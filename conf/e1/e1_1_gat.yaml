@@ -1,0 +1,5 @@
+defaults:
+  - e1_0_base
+
+model:
+  name: SiameseGAT

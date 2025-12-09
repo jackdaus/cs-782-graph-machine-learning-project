@@ -20,6 +20,21 @@ uv run generate_data.py --config-name v2_rot_only
 uv run generate_data.py --config-name v3_rot_and_trans
 ```
 
+## Run Experiments
+
+Experiments set 1: Translation only perturbations
+
+```bash
+uv run train.py --config-path conf/e1 --config-name e1_0_base
+uv run train.py --config-path conf/e1 --config-name e1_1_gat
+uv run train.py --config-path conf/e1 --config-name e1_2_gat_emb256
+```
+
+View results with 
+```bash
+tensorboard --logdir runs
+```
+
 ## Data Generation Details
 
 Configuration is in `conf/data_gen/base.yaml`. Key parameters:

@@ -1,8 +1,0 @@
-defaults:
-  - e1_0_base
-
-model:
-  embedding_size: 32
-
-training:
-  batch_size: 32
