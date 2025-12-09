@@ -1,8 +1,9 @@
 defaults:
-  - e2_0_base
+  - e3_0_base
 
 model:
   rotation_representation: quaternion
 
 training:
-  rotation_loss: quaternion_dot
+  rotation_loss: mse
+  lambda_translation: 0.1

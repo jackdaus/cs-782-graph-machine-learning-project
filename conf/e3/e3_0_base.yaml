@@ -8,7 +8,7 @@ dataset:
   include_image_features: false
 
 training:
-  num_epochs: 100
+  num_epochs: 1000
   batch_size: 32
   lr: 0.001
   lambda_translation: 1.0

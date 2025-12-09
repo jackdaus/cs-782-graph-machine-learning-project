@@ -11,7 +11,7 @@ training:
   num_epochs: 500
   batch_size: 32
   lr: 0.001
-  lambda_translation: 1.0
+  lambda_translation: 0.1
   lambda_frobenius: 0.01
   rotation_loss: l1
   use_frobenius_regularization: true

@@ -1,6 +1,6 @@
 import torch
 
-def quaternion_loss(quat_pred, quat_gt):
+def quaternion_dot_loss(quat_pred, quat_gt):
     # 1. Compute the geodesic loss
     # Normalize the predicted quat, since the predictor may not have given us a clean unit vector!
     quat_pred_norm = torch.norm(quat_pred, dim=-1, keepdim=True)

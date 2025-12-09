@@ -1,6 +1,0 @@
-# No image features for E4.1 experiment
-defaults:
-  - e4_0_base
-
-dataset:
-  include_image_features: false

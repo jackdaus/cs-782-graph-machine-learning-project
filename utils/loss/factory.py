@@ -9,7 +9,7 @@ import torch
 from torch import nn
 import roma
 
-from .quaternion import quaternion_loss
+from .quaternion import quaternion_dot_loss
 
 
 def frobenius_loss(pred_rotmat: torch.Tensor, true_rotmat: torch.Tensor) -> torch.Tensor:
@@ -72,7 +72,7 @@ ROTATION_LOSS_REGISTRY = {
     "mse": lambda: nn.MSELoss(),
     "frobenius": lambda: frobenius_loss,
     # For quaternion representation
-    "quaternion": lambda: quaternion_loss,
+    "quaternion_dot": lambda: quaternion_dot_loss,
 }
 
 
@@ -82,10 +82,10 @@ def get_rotation_loss(loss_name: str, rotation_representation: str) -> RotationL
 
     Args:
         loss_name: Name of the loss function. Options:
-            - "l1": L1 loss on rotation matrices
-            - "mse": MSE loss on rotation matrices
+            - "l1": L1 loss on quaternions or rotation matrices
+            - "mse": MSE loss on quaternions or rotation matrices
             - "frobenius": Frobenius norm loss on rotation matrices
-            - "quaternion": Geodesic loss on quaternions
+            - "quaternion_dot": loss on quaternions using dot product
         rotation_representation: Either "quaternion" or "matrix"
 
     Returns:
@@ -99,8 +99,8 @@ def get_rotation_loss(loss_name: str, rotation_representation: str) -> RotationL
         raise ValueError(f"Unknown rotation loss '{loss_name}'. Available: {available}")
 
     # Validate compatibility between loss function and rotation representation
-    matrix_losses = {"l1", "mse", "frobenius"}
-    quaternion_losses = {"quaternion"}
+    matrix_losses = {"frobenius"}
+    quaternion_losses = {"quaternion_dot"}
 
     if rotation_representation == "matrix" and loss_name in quaternion_losses:
         raise ValueError(

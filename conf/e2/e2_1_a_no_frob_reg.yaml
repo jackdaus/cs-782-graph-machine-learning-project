@@ -1,0 +1,7 @@
+defaults:
+  - e2_0_base
+
+training:
+  use_frobenius_regularization: false
+  lr: 0.001
+  num_epochs: 500

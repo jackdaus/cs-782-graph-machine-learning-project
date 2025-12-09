@@ -46,8 +46,10 @@ def process_rotation_output(pred_rotation_raw: torch.Tensor, rotation_representa
         Processed rotation (valid SO(3) matrix)
     """
     if rotation_representation == "matrix":
+        # Convert from flattened 9D vector to 3x3 matrix
+        pred_rotation_raw_mat = pred_rotation_raw.view(-1, 3, 3)
         # Project to valid SO(3) rotation matrix using Procrustes
-        return roma.special_procrustes(pred_rotation_raw)
+        return roma.special_procrustes(pred_rotation_raw_mat)
     else:
         # Normalize quaternion and convert to rotation matrix
         pred_quat_normalized = pred_rotation_raw / torch.norm(pred_rotation_raw, dim=-1, keepdim=True)
@@ -67,7 +69,9 @@ def compute_frobenius_regularization(pred_rotation_raw: torch.Tensor, pred_rotat
     Returns:
         Mean Frobenius norm over the batch
     """
-    return torch.norm(pred_rotation_raw - pred_rotation, p='fro', dim=(-2, -1)).mean()
+    # Convert from flattened 9D vector to 3x3 matrix
+    pred_rotation_raw_mat = pred_rotation_raw.view(-1, 3, 3)
+    return torch.norm(pred_rotation_raw_mat - pred_rotation, p='fro', dim=(-2, -1)).mean()
 
 
 @hydra.main(version_base=None, config_path="conf/e2", config_name="e2_0_base")
@@ -229,7 +233,7 @@ def main(cfg: DictConfig):
                     pred_rotation = process_rotation_output(pred_rotation_raw, rotation_representation)
 
                     # Calculate Frobenius norm (only meaningful for matrix representation)
-                    if use_frobenius_reg and rotation_representation == "matrix":
+                    if rotation_representation == "matrix":
                         frobenius_norm = compute_frobenius_regularization(pred_rotation_raw, pred_rotation)
 
                     # Calculate rotation loss using the configured loss function
@@ -383,22 +387,37 @@ def main(cfg: DictConfig):
     }, checkpoint_path)
     log(f"Model checkpoint saved to: {checkpoint_path}")
 
-    # Evaluate on test set
+    # Final evaluation on all datasets
     log("\n" + "=" * 50)
-    log("Evaluating on held-out TEST set...")
+    log("Final evaluation on all datasets...")
     log("=" * 50)
 
     test_loader = DataLoader(test_dataset, cfg.training.batch_size, shuffle=False)
+
+    train_results = evaluate(model, train_loader, rotation_representation=rotation_representation)
+    val_results = evaluate(model, val_loader, rotation_representation=rotation_representation)
     test_results = evaluate(model, test_loader, rotation_representation=rotation_representation)
+
+    log(f"\nTrain Results:")
+    log(f"  - Translation Error: {train_results['translation_error']:.6f}")
+    log(f"  - Angular Error: {train_results['angular_error']:.2f}°")
+
+    log(f"\nVal Results:")
+    log(f"  - Translation Error: {val_results['translation_error']:.6f}")
+    log(f"  - Angular Error: {val_results['angular_error']:.2f}°")
 
     log(f"\nTest Results:")
     log(f"  - Translation Error: {test_results['translation_error']:.6f}")
     log(f"  - Angular Error: {test_results['angular_error']:.2f}°")
-    log(f"  - Num samples: {test_results['num_samples']}")
 
-    # Log test metrics to TensorBoard
-    writer.add_scalar('translation_error/test', test_results['translation_error'], cfg.training.num_epochs)
-    writer.add_scalar('angular_error/test', test_results['angular_error'], cfg.training.num_epochs)
+    # Log final metrics to TensorBoard
+    final_step = cfg.training.num_epochs
+    writer.add_scalar('translation_error/train_final', train_results['translation_error'], final_step)
+    writer.add_scalar('angular_error/train_final', train_results['angular_error'], final_step)
+    writer.add_scalar('translation_error/val_final', val_results['translation_error'], final_step)
+    writer.add_scalar('angular_error/val_final', val_results['angular_error'], final_step)
+    writer.add_scalar('translation_error/test', test_results['translation_error'], final_step)
+    writer.add_scalar('angular_error/test', test_results['angular_error'], final_step)
     writer.close()
 
     return test_results

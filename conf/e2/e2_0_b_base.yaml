@@ -1,0 +1,9 @@
+defaults:
+  - e2_0_base
+
+training:
+  lr: 0.001
+  scheduler:
+    enabled: true
+    step_size: 200
+    gamma: 0.8

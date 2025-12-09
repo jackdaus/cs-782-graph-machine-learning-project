@@ -9,13 +9,14 @@ dataset:
   include_image_features: false
 
 training:
-  num_epochs: 500
+  num_epochs: 1000
   batch_size: 32
   lr: 0.01
   # Loss weighting
-  lambda_translation: 0.1
+  lambda_translation: 0.0
   lambda_frobenius: 0.01
-  # Rotation loss function: "l1", "mse", "frobenius", "quaternion"
+  # Rotation loss function: "l1", "mse", "frobenius", "quaternion_dot"
+  enable_rotation_loss: true
   rotation_loss: l1
   # Whether to apply Frobenius norm regularization (only for matrix representation)
   use_frobenius_regularization: true
