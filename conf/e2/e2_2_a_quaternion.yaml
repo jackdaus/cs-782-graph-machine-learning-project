@@ -5,5 +5,5 @@ model:
   rotation_representation: quaternion
 
 training:
-  rotation_loss: mse
+  rotation_loss: quaternion_dot
   lr: 0.001

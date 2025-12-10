@@ -4,4 +4,3 @@ defaults:
 training:
   use_frobenius_regularization: false
   lr: 0.001
-  num_epochs: 500
