@@ -1,12 +1,16 @@
 # About
 
-todo
+This project explores how we might be able to use graph neural networks to stitch together disparate structure from motion (SfM) reconstructions. 
+The project was completed as part of George Mason University's CS 782 - Advanced Machine Learning course in Fall 2025.
+(This code is still a work in progress.)
+
+
+<img src="architecture.png" width="1000">
 
 ## Generating Data
 
-To generate the data from colmap reconstructions, use the `generate_data.py` script.
-
-(#TODO describe downloading colmap data)
+To generate the data from colmap reconstructions, use the `generate_data.py` script. Prior to running this script, 
+you will need to have a colmap reconstruction available locally. See that script for more details.
 
 To generate the 3 datasets used in the experiments.
 ```bash
@@ -22,7 +26,7 @@ uv run generate_data.py --config-name v3_rot_and_trans
 
 ## Run Experiments
 
-Experiments set 1: Translation only perturbations
+To run the experiments, use the `train.py` script with the appropriate configuration files located in the `conf` directory.
 
 ```bash
 # Experiments set 1: Translation only perturbations
@@ -50,9 +54,9 @@ uv run train.py --config-path conf/e4 --config-name e4_0_base
 uv run train.py --config-path conf/e4 --config-name e4_1_quat_mse
 ```
 
-View results with tensorboard:
+The `train.py` script will save model checkpoints and TensorBoard logs to the `runs/` directory by default. View the logs with:
 ```bash
-tensorboard --logdir runs
+tensorboard --logdir=runs
 ```
 
 ## Data Generation Details
