@@ -1,0 +1,6 @@
+# previously called e3_3_a_quat_naive.yaml
+defaults:
+  - e3_0_base
+
+training:
+  lambda_translation: 0.1

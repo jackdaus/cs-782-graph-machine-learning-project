@@ -1,19 +1,21 @@
+# previously called e3_3_quat_naive.yaml
+
 model:
   name: SiameseGCN
   embedding_size: 64
-  rotation_representation: matrix
+  rotation_representation: quaternion
 
 dataset:
   name: samples_v3_rot_and_trans
-  include_image_features: true
+  include_image_features: false
 
 training:
   num_epochs: 1000
   batch_size: 32
   lr: 0.001
-  lambda_translation: 0.1
+  lambda_translation: 1.0
   lambda_frobenius: 0.01
-  rotation_loss: l1
+  rotation_loss: mse
   use_frobenius_regularization: true
   scheduler:
     enabled: true
