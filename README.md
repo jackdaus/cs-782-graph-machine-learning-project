@@ -1,9 +1,10 @@
 # About
 
-This project explores how we might be able to use graph neural networks to stitch together disparate structure from motion (SfM) reconstructions. 
+This project explores how we might be able to use graph neural networks to stitch together disparate structure from motion (SfM) reconstructions.
 The project was completed as part of George Mason University's CS 782 - Advanced Machine Learning course in Fall 2025.
 (This code is still a work in progress.)
 
+<img src="gnn_sfm_merge.png" width="1000">
 
 <img src="architecture.png" width="1000">
 
